@@ -76,3 +76,19 @@
   .billing-banner{margin:12px 12px 0;align-items:flex-start;flex-direction:column}
   .billing-banner .ghost{width:100%}
 }
+
+.billing-setup-shell{min-height:100vh;background:#f6f7f9;display:grid;place-items:center;padding:18px}
+.billing-setup-card{width:min(560px,100%);background:#fff;border:1px solid #e3e5e9;border-radius:22px;padding:30px;box-shadow:0 24px 80px rgba(18,21,29,.1)}
+.billing-setup-card .brand{margin-bottom:34px}
+.billing-setup-card h1{font:800 30px Manrope;margin:14px 0 10px}
+.billing-setup-card>p{font-size:13px;line-height:1.65;color:#747984;margin:0 0 20px}
+.billing-summary{border:1px solid #eceef2;border-radius:14px;overflow:hidden;margin:18px 0}
+.billing-summary>div{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 15px;border-top:1px solid #f0f1f3}
+.billing-summary>div:first-child{border-top:0}
+.billing-summary span{font-size:11px;color:#858a93}
+.billing-summary strong{font-size:12px}
+.billing-setup-card>small{display:block;font-size:9px;line-height:1.5;color:#969aa2;margin-top:10px}
+@media(max-width:560px){
+  .billing-setup-card{padding:24px 16px}
+  .billing-setup-card h1{font-size:25px}
+}
