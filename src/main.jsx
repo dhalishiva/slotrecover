@@ -490,6 +490,7 @@ function Dashboard({ session, demo, onExitDemo }) {
         </div>
       </header>
 
+      {!demo && <BillingBanner session={session} />}
       {needsSetup && !demo ? <Onboarding session={session} onDone={loadLive}/> :
         nav === 'Overview' ? <Overview data={data} busy={busy} refresh={loadLive} demo={demo} onNew={() => setModal('appointment')}/> :
         nav === 'Appointments' ? <Appointments appointments={data.appointments} onNew={() => setModal('appointment')}/> :
@@ -505,6 +506,114 @@ function Dashboard({ session, demo, onExitDemo }) {
     {toast && <div className="toast">{toast}</div>}
   </div>
 }
+
+function BillingBanner({ session }) {
+  const [billing, setBilling] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => { loadBilling() }, [session?.user?.id])
+
+  async function loadBilling() {
+    if (!session || !supabase) return
+    const { data, error } = await supabase.functions.invoke('slotrecover-billing', {
+      body: { action: 'status' }
+    })
+    if (!error && data?.billing) setBilling(data.billing)
+  }
+
+  async function loadRazorpay() {
+    if (window.Razorpay) return true
+    return await new Promise(resolve => {
+      const script = document.createElement('script')
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+      script.onload = () => resolve(true)
+      script.onerror = () => resolve(false)
+      document.body.appendChild(script)
+    })
+  }
+
+  async function startBilling() {
+    setBusy(true); setMessage('')
+    const { data, error } = await supabase.functions.invoke('slotrecover-billing', {
+      body: { action: 'create_subscription' }
+    })
+    if (error || data?.error) {
+      setBusy(false)
+      setMessage(data?.message || error?.message || 'Unable to start billing setup.')
+      return
+    }
+
+    const loaded = await loadRazorpay()
+    if (!loaded) {
+      setBusy(false)
+      setMessage('Unable to load Razorpay Checkout.')
+      return
+    }
+
+    const checkout = new window.Razorpay({
+      key: data.key_id,
+      subscription_id: data.subscription_id,
+      name: data.name,
+      description: data.description,
+      prefill: data.prefill,
+      theme: { color: '#17191e' },
+      handler: async response => {
+        const { data: verified, error: verifyError } = await supabase.functions.invoke('slotrecover-billing', {
+          body: {
+            action: 'verify_checkout',
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_subscription_id: response.razorpay_subscription_id,
+            razorpay_signature: response.razorpay_signature
+          }
+        })
+        if (verifyError || verified?.error) {
+          setMessage(verified?.message || verifyError?.message || 'Billing authorization could not be verified.')
+          setBusy(false)
+          return
+        }
+        setMessage('Payment method authorized. Your 7-day trial remains active.')
+        setBusy(false)
+        loadBilling()
+      },
+      modal: {
+        ondismiss: () => setBusy(false)
+      }
+    })
+    checkout.open()
+  }
+
+  if (!billing) return null
+
+  const trialEnd = new Date(billing.trial_ends_at)
+  const msLeft = trialEnd.getTime() - Date.now()
+  const daysLeft = Math.max(0, Math.ceil(msLeft / 86400000))
+  const active = billing.status === 'active'
+  const authorized = ['authenticated','authorization_pending'].includes(billing.status)
+  const expired = msLeft <= 0 && !active
+
+  if (expired) {
+    return <div className="billing-gate">
+      <div className="billing-gate-card">
+        <div className="billing-pill">TRIAL ENDED</div>
+        <h2>Your 7-day trial has ended.</h2>
+        <p>Authorize your Razorpay subscription to continue using SlotRecover.</p>
+        <button className="primary" onClick={startBilling} disabled={busy}>{busy ? 'Opening Razorpay…' : 'Continue with Razorpay'}</button>
+        {message && <div className="form-msg">{message}</div>}
+      </div>
+    </div>
+  }
+
+  return <div className="billing-banner">
+    <div>
+      <strong>{active ? 'Subscription active' : authorized ? 'Trial active · billing authorized' : '7-day free trial'}</strong>
+      <span>{active ? 'Razorpay subscription is active.' : daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + ' remaining in your trial.'}</span>
+    </div>
+    {!active && billing.status !== 'authenticated' && <button className="ghost" onClick={startBilling} disabled={busy}>{busy ? 'Opening…' : 'Set up billing'}</button>}
+    {message && <small>{message}</small>}
+  </div>
+}
+
 
 function Onboarding({ session, onDone }) {
   const [practice, setPractice] = useState('')
