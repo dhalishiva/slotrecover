@@ -298,15 +298,12 @@ function Onboarding({ session, onDone }) {
   async function createWorkspace(e) {
     e.preventDefault()
     setBusy(true); setError('')
-    const { data: p, error: pe } = await supabase.from('practices')
-      .insert({ owner_id: session.user.id, name: practice }).select().single()
-    if (pe) { setError(pe.message); setBusy(false); return }
-
-    const { error: se } = await supabase.from('services').insert({
-      practice_id: p.id, name: service, duration_minutes: 60,
-      price_cents: Math.max(0, Math.round(Number(price || 0) * 100))
+    const { error } = await supabase.rpc('create_practice_workspace', {
+      p_name: practice,
+      p_service_name: service,
+      p_price_cents: Math.max(0, Math.round(Number(price || 0) * 100))
     })
-    if (se) { setError(se.message); setBusy(false); return }
+    if (error) { setError(error.message); setBusy(false); return }
     setBusy(false)
     onDone()
   }
