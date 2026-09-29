@@ -44,7 +44,7 @@ export async function fetchReminderAppointment(id) {
   return data
 }
 
-export function ReminderModal({ appointment, practice, onClose }) {
+export function ReminderModal({ appointment, practice, onClose, onSent }) {
   const [phone, setPhone] = useState(appointment.clients?.phone || '')
   const [text, setText] = useState(() => buildReminderText(appointment, practice))
   const [copied, setCopied] = useState(false)
@@ -53,6 +53,13 @@ export function ReminderModal({ appointment, practice, onClose }) {
   const digits = normalizePhone(phone, practice?.default_country_code)
   const href = digits ? `https://wa.me/${digits}?text=${encodeURIComponent(text)}` : null
   const name = [appointment.clients?.first_name, appointment.clients?.last_name].filter(Boolean).join(' ') || 'client'
+
+  // Record that a reminder was opened in WhatsApp so it shows in the Message center.
+  function logSent() {
+    if (!practice?.id || !appointment?.id) return
+    supabase.from('message_events').insert({ practice_id: practice.id, appointment_id: appointment.id, channel: 'whatsapp', kind: 'reminder' })
+      .then(() => onSent && onSent())
+  }
 
   async function copy() {
     try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1800) } catch {}
@@ -67,7 +74,7 @@ export function ReminderModal({ appointment, practice, onClose }) {
       <div className="modal-actions">
         <button type="button" className="ghost" onClick={copy}><Copy size={15}/>{copied ? 'Copied' : 'Copy message'}</button>
         {href
-          ? <a className="primary whatsapp-btn" href={href} target="_blank" rel="noreferrer" onClick={() => setTimeout(onClose, 400)}><MessageCircle size={16}/>Open WhatsApp</a>
+          ? <a className="primary whatsapp-btn" href={href} target="_blank" rel="noreferrer" onClick={() => { logSent(); setTimeout(onClose, 400) }}><MessageCircle size={16}/>Open WhatsApp</a>
           : <button type="button" className="primary" disabled>Add a phone number</button>}
       </div>
     </div>

@@ -325,3 +325,30 @@
 .install-steps svg{margin-top:2px;color:#5961dd}
 @media(max-width:560px){.notif-row{flex-direction:column;align-items:stretch}.notif-actions{justify-content:flex-start}}
 .logo-svg{flex:none;display:block;border-radius:9px}
+
+
+/* ---- Messaging ---- */
+.msg-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;border-bottom:1px solid #eee;padding-right:14px;flex-wrap:wrap}
+.msg-toolbar .filters{border-bottom:0;flex-wrap:wrap}
+.msg-search{height:34px;border:1px solid #e4e6ea;border-radius:9px;display:flex;align-items:center;gap:7px;padding:0 10px;color:#8a8e97;min-width:200px}
+.msg-search input{border:0;outline:0;font-size:12px;min-width:0;flex:1}
+.msg-row{display:grid;grid-template-columns:34px minmax(0,1fr) 130px 150px 40px;gap:12px;align-items:center;padding:13px 16px;border-top:1px solid #f0f1f3}
+.msg-icon{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;background:#edf4ff;color:#3976c9}
+.msg-icon.whatsapp{background:#effaf4;color:#1c9c5a}
+.msg-icon.offer{background:#f1efff;color:#665bd8}
+.msg-main{display:flex;flex-direction:column;gap:3px;min-width:0}
+.msg-main strong{font-size:12px}
+.msg-main span{font-size:11px;color:#8a8e97;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msg-main em{font-size:10px;color:#8a8e97;font-style:normal}
+.msg-main em.msg-error{color:#b0562f}
+.msg-when{font-size:11px;color:#6c7079}
+.msg-action{display:flex;justify-content:flex-end}
+.status.muted{background:#f2f3f5;color:#80848d}
+.msg-footnote{font-size:11px;color:#9a9ea6;margin:12px 4px 0}
+@media(max-width:760px){
+  .msg-toolbar{padding:0 12px 12px}
+  .msg-search{width:100%}
+  .msg-row{grid-template-columns:32px minmax(0,1fr) auto;grid-template-areas:"i m s" "i w a"}
+  .msg-icon{grid-area:i;align-self:start}.msg-main{grid-area:m}.msg-status{grid-area:s;justify-self:end}.msg-when{grid-area:w}.msg-action{grid-area:a}
+  .msg-main span{white-space:normal}
+}

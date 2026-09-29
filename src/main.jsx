@@ -16,6 +16,7 @@ import { AppointmentModal } from './booking'
 import { ReminderModal, fetchReminderAppointment, reminderSelect } from './whatsapp'
 import { registerServiceWorker } from './pwa'
 import { InstallModal, useInstallState } from './appInstall'
+import { MessagingPage } from './messaging'
 import '@fontsource/dm-sans/400.css'
 import '@fontsource/dm-sans/500.css'
 import '@fontsource/dm-sans/600.css'
@@ -483,6 +484,7 @@ function Dashboard({ session, demo, onExitDemo }) {
   const [toast, setToast] = useState('')
   const [reminder, setReminder] = useState(null)
   const [showInstall, setShowInstall] = useState(false)
+  const [msgKey, setMsgKey] = useState(0)
   const install = useInstallState()
   const emptyData = { appointments: [], revenue: 0, atRisk: 0, recoveryRate: 0, noShow: 0, recoveredSlots: 0, cancelledSlots: 0, activity: [], waitlist: [] }
   const [loaded, setLoaded] = useState(demo)
@@ -670,7 +672,7 @@ function Dashboard({ session, demo, onExitDemo }) {
         nav === 'Appointments' ? <Appointments appointments={data.appointments} onNew={() => setModal('appointment')} onRemind={demo ? null : a => setReminder(a.raw)}/> :
         nav === 'Recovery' ? <Recovery waitlist={data.waitlist} onNew={() => setModal('appointment')}/> :
         nav === 'Clients' ? <EmptyPanel title="Client intelligence" text="Client history, confirmation behavior, and waitlist preferences will live here." icon={UsersRound}/> :
-        nav === 'Messaging' ? <EmptyPanel title="Messaging center" text="Track confirmation reminders, delivery states, replies, and channel costs." icon={MessageCircleMore}/> :
+        nav === 'Messaging' ? <MessagingPage practice={practice} demo={demo} refreshKey={msgKey} onRemind={demo ? null : a => setReminder(a)}/> :
         <SettingsPage practice={practice} demo={demo} notify={notify} onChanged={loadLive}/>
       }
     </main>
@@ -679,7 +681,7 @@ function Dashboard({ session, demo, onExitDemo }) {
       ? <DemoNotice onClose={() => setModal(null)}/>
       : <AppointmentModal practiceId={practiceId} practice={practice} services={services} onClose={() => setModal(null)} onSaved={kind => { setModal(null); notify(kind === 'waitlist' ? 'Added to the waitlist' : 'Appointment created'); loadLive() }}/>)}
     {showInstall && <InstallModal onClose={() => setShowInstall(false)}/>}
-    {reminder && <ReminderModal appointment={reminder} practice={practice} onClose={() => setReminder(null)}/>}
+    {reminder && <ReminderModal appointment={reminder} practice={practice} onClose={() => setReminder(null)} onSent={() => setMsgKey(k => k + 1)}/>}
     {toast && <div className="toast">{toast}</div>}
   </div>
 }
