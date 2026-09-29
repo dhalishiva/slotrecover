@@ -119,7 +119,7 @@ function AuthScreen({ onDemo }) {
         <p className="kicker">WELCOME</p>
         <h2>{otpStep ? 'Verify your email' : mode === 'signin' ? 'Sign in to your workspace' : 'Create your workspace'}</h2>
         <p className="subtle">{otpStep
-          ? `Enter the 6-digit code sent to ${email}.`
+          ? `Enter the verification code sent to ${email}.`
           : mode === 'signin'
             ? 'See what is confirmed, at risk, and already recovered.'
             : 'Create your account, then verify your email with a one-time code.'}</p>
@@ -138,15 +138,15 @@ function AuthScreen({ onDemo }) {
             autoFocus
             inputMode="numeric"
             autoComplete="one-time-code"
-            pattern="[0-9]{6}"
-            maxLength={6}
+            pattern="[0-9]{6,10}"
+            maxLength={10}
             value={otp}
-            onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            placeholder="123456"
+            onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 10))}
+            placeholder="Enter verification code"
           />
         </>}
 
-        <button className="primary wide" disabled={busy || (otpStep && otp.length !== 6)}>
+        <button className="primary wide" disabled={busy || (otpStep && otp.length < 6)}>
           {busy ? 'Working…' : otpStep ? 'Verify email' : mode === 'signin' ? 'Sign in' : 'Create account'}
         </button>
 
