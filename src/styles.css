@@ -352,3 +352,24 @@
   .msg-icon{grid-area:i;align-self:start}.msg-main{grid-area:m}.msg-status{grid-area:s;justify-self:end}.msg-when{grid-area:w}.msg-action{grid-area:a}
   .msg-main span{white-space:normal}
 }
+
+/* ---- Mobile nav buttons (explicit so phone dark modes don't restyle them) ---- */
+:root{color-scheme:light}
+.menu,.close-nav{width:38px;height:38px;border-radius:10px;place-items:center;padding:0;-webkit-appearance:none;appearance:none;line-height:0}
+.menu{border:1px solid #e1e3e8;background:#fff;color:#17191e}
+.menu:active{background:#f3f4f6}
+.close-nav{border:1px solid #2a2e38;background:#171a21;color:#e8eaf0}
+.close-nav:active{background:#20242d}
+.menu svg,.close-nav svg{display:block}
+@media(max-width:760px){.close-nav{top:9px}}
+
+/* ---- Auth extras ---- */
+.forgot-link{align-self:flex-end;border:0;background:none;color:#4f57dc;font-size:12px;font-weight:700;margin-top:8px;padding:0}
+.form-ok{font-size:12px;color:#2f7d57;margin-top:12px;line-height:1.5}
+
+.account-pw{margin-top:16px;padding-top:16px;border-top:1px solid #f0f1f3}
+.account-pw-head{display:flex;align-items:center;gap:8px;font-size:13px;color:#353941}
+.field input:disabled{background:#f6f7f9;color:#6c7079}
+.reset-card{width:min(460px,100%)}
+.reset-card label{font-size:12px;font-weight:700;margin:14px 0 7px}
+.icon-btn{color:#262930}

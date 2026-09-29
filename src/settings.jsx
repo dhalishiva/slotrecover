@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Building2, Clock3, CreditCard, Download, MessageSquareText, Plus, Save, Scissors, Smartphone, UsersRound } from 'lucide-react'
+import { Building2, Clock3, CreditCard, Download, KeyRound, MessageSquareText, Plus, Save, Scissors, Smartphone, UserRound, UsersRound } from 'lucide-react'
 import { InstallModal, NotificationsControl, useInstallState } from './appInstall'
 import { supabase } from './supabase'
 import { Field, Modal, money } from './ui'
@@ -20,7 +20,8 @@ export function SettingsPage({ practice, demo, notify, onChanged }) {
   }
   if (!practice) return <div className="page"><div className="empty-inline"><div className="spinner"/></div></div>
   return <div className="page settings-page">
-    <div className="page-heading"><div><div className="eyebrow-dark">WORKSPACE</div><h1>Settings</h1><p>Business details, opening hours, services, staff, client messages and your subscription.</p></div></div>
+    <div className="page-heading"><div><div className="eyebrow-dark">WORKSPACE</div><h1>Settings</h1><p>Your account, business details, opening hours, services, staff, client messages and subscription.</p></div></div>
+    <AccountSection notify={notify}/>
     <BusinessSection practice={practice} notify={notify} onChanged={onChanged}/>
     <HoursSection practice={practice} notify={notify} onChanged={onChanged}/>
     <ServicesSection practice={practice} notify={notify} onChanged={changedAll}/>
@@ -350,5 +351,68 @@ function AppSection({ practice, notify }) {
     </div>
     <NotificationsControl practiceId={practice.id} notify={notify}/>
     {showInstall && <InstallModal onClose={() => setShowInstall(false)}/>}
+  </Section>
+}
+
+function AccountSection({ notify }) {
+  const [user, setUser] = useState(null)
+  const [name, setName] = useState('')
+  const [pw, setPw] = useState({ current: '', next: '', confirm: '' })
+  const [busy, setBusy] = useState('')
+  const [error, setError] = useState('')
+  const [pwError, setPwError] = useState('')
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user)
+      setName(data.user?.user_metadata?.full_name || '')
+    })
+  }, [])
+
+  async function saveName(e) {
+    e.preventDefault(); setError(''); setBusy('name')
+    const { error } = await supabase.auth.updateUser({ data: { full_name: name.trim() } })
+    setBusy('')
+    if (error) return setError(error.message)
+    notify('Profile saved')
+  }
+
+  async function changePassword(e) {
+    e.preventDefault(); setPwError('')
+    if (pw.next.length < 8) return setPwError('Use at least 8 characters for the new password.')
+    if (pw.next !== pw.confirm) return setPwError("The new passwords don't match.")
+    if (pw.next === pw.current) return setPwError('Choose a password different from your current one.')
+    setBusy('pw')
+    // Confirm the current password before changing it.
+    const { error: authError } = await supabase.auth.signInWithPassword({ email: user.email, password: pw.current })
+    if (authError) { setBusy(''); return setPwError('Your current password is incorrect.') }
+    const { error } = await supabase.auth.updateUser({ password: pw.next })
+    setBusy('')
+    if (error) return setPwError(error.message)
+    setPw({ current: '', next: '', confirm: '' })
+    notify('Password changed')
+  }
+
+  if (!user) return <Section icon={UserRound} title="Your account" text="Your profile and sign-in details."><div className="spinner"/></Section>
+
+  return <Section icon={UserRound} title="Your account" text="Your profile and sign-in details.">
+    <form className="settings-form" onSubmit={saveName}>
+      <div className="form-grid">
+        <Field label="Your name"><input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Shiva" autoComplete="name"/></Field>
+        <Field label="Email" hint="Used to sign in. Contact support to change it."><input value={user.email || ''} disabled/></Field>
+      </div>
+      {error && <div className="form-msg">{error}</div>}
+      <div className="settings-actions"><button className="primary" disabled={busy === 'name'}><Save size={16}/>{busy === 'name' ? 'Saving…' : 'Save profile'}</button></div>
+    </form>
+    <form className="settings-form account-pw" onSubmit={changePassword}>
+      <div className="account-pw-head"><KeyRound size={15}/><strong>Change password</strong></div>
+      <div className="form-grid three">
+        <Field label="Current password"><input type="password" autoComplete="current-password" required value={pw.current} onChange={e => setPw({ ...pw, current: e.target.value })}/></Field>
+        <Field label="New password"><input type="password" autoComplete="new-password" required minLength={8} value={pw.next} onChange={e => setPw({ ...pw, next: e.target.value })} placeholder="At least 8 characters"/></Field>
+        <Field label="Confirm new password"><input type="password" autoComplete="new-password" required minLength={8} value={pw.confirm} onChange={e => setPw({ ...pw, confirm: e.target.value })}/></Field>
+      </div>
+      {pwError && <div className="form-msg">{pwError}</div>}
+      <div className="settings-actions"><button className="primary" disabled={busy === 'pw'}><KeyRound size={16}/>{busy === 'pw' ? 'Updating…' : 'Update password'}</button></div>
+    </form>
   </Section>
 }

@@ -49,8 +49,12 @@ function App() {
   return <><AppContent />{!isPublicAction && <HelpBubble />}</>
 }
 
+// Opened from a password-reset email link (implicit flow puts type=recovery in the hash).
+const openedFromRecoveryLink = typeof window !== 'undefined' && /type=recovery/.test(window.location.hash)
+
 function AppContent() {
   const [session, setSession] = useState(null)
+  const [recovery, setRecovery] = useState(openedFromRecoveryLink)
   const [loading, setLoading] = useState(true)
   const [demo, setDemo] = useState(!supabaseConfigured)
   const [billing, setBilling] = useState(null)
@@ -62,7 +66,10 @@ function AppContent() {
       setSession(data.session)
       setLoading(false)
     })
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => setSession(next))
+    const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
+      if (event === 'PASSWORD_RECOVERY') setRecovery(true)
+      setSession(next)
+    })
     return () => sub.subscription.unsubscribe()
   }, [])
 
@@ -91,8 +98,9 @@ function AppContent() {
     return <PublicActionPage action={publicAction} token={publicToken} />
   }
 
-  if (loading || (session && !demo && billingLoading)) return <div className="boot"><div className="spinner" />Loading workspace…</div>
-  if (!session && !demo) return <AuthScreen onDemo={() => setDemo(true)} />
+  if (recovery && session) return <SetNewPasswordScreen onDone={() => { setRecovery(false); window.history.replaceState({}, '', '/') }} />
+  if (loading || (recovery && !session && openedFromRecoveryLink) || (session && !demo && billingLoading)) return <div className="boot"><div className="spinner" />Loading workspace…</div>
+  if (!session && !demo) return <AuthScreen onDemo={() => setDemo(true)} onRecoveryStart={() => setRecovery(true)} onRecoveryFailed={() => setRecovery(false)} />
   if (session && !demo && billing && !hasAccess(billing)) {
     return <BillingSetupScreen billing={billing} onReady={() => window.location.reload()} />
   }
@@ -323,7 +331,40 @@ function PublicActionPage({ action, token }) {
   </div>
 }
 
-function AuthScreen({ onDemo }) {
+function SetNewPasswordScreen({ onDone }) {
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  async function save(e) {
+    e.preventDefault(); setMsg('')
+    if (password.length < 8) return setMsg('Use at least 8 characters.')
+    if (password !== confirm) return setMsg('The two passwords don\'t match.')
+    setBusy(true)
+    const { error } = await supabase.auth.updateUser({ password })
+    setBusy(false)
+    if (error) return setMsg(error.message)
+    onDone()
+  }
+
+  return <div className="billing-setup-shell">
+    <form className="billing-setup-card auth-box reset-card" onSubmit={save}>
+      <Brand />
+      <p className="kicker">RESET PASSWORD</p>
+      <h2>Choose a new password</h2>
+      <p className="subtle">You're verified. Set a new password to continue to your workspace.</p>
+      <label>New password</label>
+      <input type="password" autoComplete="new-password" required minLength={8} value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 8 characters"/>
+      <label>Confirm new password</label>
+      <input type="password" autoComplete="new-password" required minLength={8} value={confirm} onChange={e => setConfirm(e.target.value)}/>
+      <button className="primary wide" disabled={busy}>{busy ? 'Saving…' : 'Save password and continue'}</button>
+      {msg && <div className="form-msg">{msg}</div>}
+    </form>
+  </div>
+}
+
+function AuthScreen({ onDemo, onRecoveryStart, onRecoveryFailed }) {
   const [mode, setMode] = useState('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -332,11 +373,29 @@ function AuthScreen({ onDemo }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [agreed, setAgreed] = useState(false)
+  const [resetSent, setResetSent] = useState(false)
+  const [okMsg, setOkMsg] = useState('')
 
   async function submit(e) {
     e.preventDefault()
     setBusy(true)
-    setMsg('')
+    setMsg(''); setOkMsg('')
+
+    if (mode === 'forgot') {
+      if (!resetSent) {
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin + '/' })
+        setBusy(false)
+        if (error) return setMsg(error.message)
+        setResetSent(true)
+        setOkMsg('If an account exists for ' + email.trim() + ', we sent a password reset email. Click the link in it, or enter the code below if your email shows one.')
+        return
+      }
+      onRecoveryStart()
+      const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: otp.trim(), type: 'recovery' })
+      setBusy(false)
+      if (error) { onRecoveryFailed(); setMsg(error.message) }
+      return
+    }
 
     if (otpStep) {
       const { error } = await supabase.auth.verifyOtp({
@@ -378,11 +437,12 @@ function AuthScreen({ onDemo }) {
     setMsg('We sent a verification code to your email.')
   }
 
-  function switchMode() {
-    setMode(mode === 'signin' ? 'signup' : 'signin')
+  function switchMode(next) {
+    setMode(typeof next === 'string' ? next : mode === 'signin' ? 'signup' : 'signin')
     setOtpStep(false)
+    setResetSent(false)
     setOtp('')
-    setMsg('')
+    setMsg(''); setOkMsg('')
   }
 
   return <div className="auth-shell">
@@ -404,18 +464,30 @@ function AuthScreen({ onDemo }) {
       <form className="auth-box" onSubmit={submit}>
         <div className="mobile-brand"><Brand /></div>
         <p className="kicker">WELCOME</p>
-        <h2>{otpStep ? 'Verify your email' : mode === 'signin' ? 'Sign in to your workspace' : 'Create your workspace'}</h2>
-        <p className="subtle">{otpStep
+        <h2>{mode === 'forgot' ? 'Reset your password' : otpStep ? 'Verify your email' : mode === 'signin' ? 'Sign in to your workspace' : 'Create your workspace'}</h2>
+        <p className="subtle">{mode === 'forgot'
+          ? 'Enter your account email and we\'ll send you a way to set a new password.'
+          : otpStep
           ? `Enter the verification code sent to ${email}.`
           : mode === 'signin'
             ? 'See what is confirmed, at risk, and already recovered.'
             : 'Create your account, then verify your email with a one-time code.'}</p>
 
-        {!otpStep && <>
+        {mode === 'forgot' && <>
           <label>Email address</label>
-          <input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@business.com"/>
+          <input required type="email" autoComplete="email" value={email} disabled={resetSent} onChange={e => setEmail(e.target.value)} placeholder="you@business.com"/>
+          {resetSent && <>
+            <label>Reset code (if your email has one)</label>
+            <input inputMode="numeric" autoComplete="one-time-code" maxLength={10} value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="Enter code"/>
+          </>}
+        </>}
+
+        {mode !== 'forgot' && !otpStep && <>
+          <label>Email address</label>
+          <input required type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@business.com"/>
           <label>Password</label>
-          <input required minLength={6} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"/>
+          <input required minLength={6} type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"/>
+          {mode === 'signin' && <button type="button" className="forgot-link" onClick={() => switchMode('forgot')}>Forgot password?</button>}
           {mode === 'signup' && <label className="consent">
             <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} required/>
             <span>I'm signing up for business use and agree to the <a href="/terms" target="_blank" rel="noreferrer">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>, including the <a href="/dpa" target="_blank" rel="noreferrer">Data Processing Addendum</a>.</span>
@@ -437,13 +509,19 @@ function AuthScreen({ onDemo }) {
           />
         </>}
 
-        <button className="primary wide" disabled={busy || (otpStep && otp.length < 6)}>
-          {busy ? 'Working…' : otpStep ? 'Verify email' : mode === 'signin' ? 'Sign in' : 'Create account'}
+        <button className="primary wide" disabled={busy || (otpStep && otp.length < 6) || (mode === 'forgot' && resetSent && otp.length < 6)}>
+          {busy ? 'Working…' : mode === 'forgot' ? (resetSent ? 'Verify code' : 'Send reset email') : otpStep ? 'Verify email' : mode === 'signin' ? 'Sign in' : 'Create account'}
         </button>
 
+        {okMsg && <div className="form-ok">{okMsg}</div>}
         {msg && <div className="form-msg">{msg}</div>}
 
-        {otpStep ? (
+        {mode === 'forgot' ? (
+          <div className="switch-auth">
+            {resetSent ? <>Didn't get it? <button type="button" onClick={() => { setResetSent(false); setOtp(''); setOkMsg('') }}>Send again</button> · </> : null}
+            <button type="button" onClick={() => switchMode('signin')}>Back to sign in</button>
+          </div>
+        ) : otpStep ? (
           <div className="switch-auth">
             Wrong email?
             <button type="button" onClick={() => { setOtpStep(false); setOtp(''); setMsg('') }}>Go back</button>
@@ -661,7 +739,7 @@ function Dashboard({ session, demo, onExitDemo }) {
         <div className="top-actions">
           <button className="icon-btn"><Search size={18}/></button>
           <button className="icon-btn bell"><BellRing size={18}/><i/></button>
-          <div className="profile"><div className="profile-avatar">SR</div><span>{session?.user?.email || 'Demo user'}</span></div>
+          <div className="profile"><div className="profile-avatar">{((session?.user?.user_metadata?.full_name || session?.user?.email || 'Demo User').split(/[\s@.]+/).filter(Boolean).map(x => x[0]).slice(0, 2).join('') || 'SR').toUpperCase()}</div><span>{session?.user?.email || 'Demo user'}</span></div>
         </div>
       </header>
 
