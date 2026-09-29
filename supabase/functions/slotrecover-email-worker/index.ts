@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
   const smtpUser = Deno.env.get("SLOTRECOVER_SMTP_USER");
   const smtpPass = Deno.env.get("SLOTRECOVER_SMTP_PASS");
   const smtpFrom = Deno.env.get("SLOTRECOVER_SMTP_FROM");
-  const appUrl = Deno.env.get("SLOTRECOVER_APP_URL") || "https://slotrecover.vercel.app";
+  const appUrl = Deno.env.get("SLOTRECOVER_APP_URL") || "https://www.slotrecover.pro";
   if (!smtpHost || !smtpUser || !smtpPass || !smtpFrom) return json({ error: "smtp_not_configured" }, 503);
 
   const admin = createClient(
