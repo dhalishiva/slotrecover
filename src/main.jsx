@@ -93,10 +93,13 @@ function BillingSetupScreen({ billing, onReady }) {
   }
 
   async function startBilling() {
-    setBusy(true); setMessage('')
+    setBusy(true)
+    setMessage('')
+
     const { data, error } = await supabase.functions.invoke('slotrecover-billing', {
       body: { action: 'create_subscription' }
     })
+
     if (error || data?.error) {
       let detail = data?.message || data?.error || error?.message || 'Unable to start Razorpay.'
       try {
@@ -120,7 +123,7 @@ function BillingSetupScreen({ billing, onReady }) {
     const checkout = new window.Razorpay({
       key: data.key_id,
       subscription_id: data.subscription_id,
-      name: 'SlotRecover',
+      name: 'Dhali Services',
       description: data.description,
       prefill: data.prefill,
       theme: { color: '#17191e' },
@@ -133,11 +136,13 @@ function BillingSetupScreen({ billing, onReady }) {
             razorpay_signature: response.razorpay_signature
           }
         })
+
         if (verifyError || verified?.error) {
           setBusy(false)
           setMessage(verified?.message || verifyError?.message || 'Authorization could not be verified.')
           return
         }
+
         setBusy(false)
         onReady()
       },
@@ -149,7 +154,21 @@ function BillingSetupScreen({ billing, onReady }) {
 
   const trialEnd = new Date(billing.trial_ends_at)
   const daysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / 86400000))
-  const plan = billing.billing_plans
+  const plan = Array.isArray(billing.billing_plans) ? billing.billing_plans[0] : billing.billing_plans
+  const currency = plan?.currency || 'USD'
+  const amount = (plan?.amount_paise || 0) / 100
+  const formattedAmount = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }).format(amount)
+  const formattedZero = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(0)
 
   return <div className="billing-setup-shell">
     <div className="billing-setup-card">
@@ -157,20 +176,22 @@ function BillingSetupScreen({ billing, onReady }) {
       <div className="billing-pill">7-DAY FREE TRIAL</div>
       <h1>Start your SlotRecover trial.</h1>
       <p>Authorize Razorpay now. Your subscription billing is scheduled to begin after the 7-day trial ends.</p>
+
       <div className="billing-summary">
         <div><span>Trial period</span><strong>{daysLeft || 7} days</strong></div>
-        <div><span>Test plan</span><strong>{plan?.currency === 'USD' ? '
-        <div><span>Charge today</span><strong>₹0*</strong></div>
+        <div><span>Test plan</span><strong>{formattedAmount} / {plan?.period || 'month'}</strong></div>
+        <div><span>Charge today</span><strong>{formattedZero}*</strong></div>
       </div>
+
       <button className="primary wide" onClick={startBilling} disabled={busy}>
         {busy ? 'Opening Razorpay…' : 'Authorize & start trial'}
       </button>
+
       <small>*Razorpay may perform a small mandate/authentication transaction depending on the payment method.</small>
       {message && <div className="form-msg">{message}</div>}
     </div>
   </div>
 }
-
 
 function PublicActionPage({ action, token }) {
   const query = new URLSearchParams(window.location.search)
