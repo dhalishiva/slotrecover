@@ -4,9 +4,18 @@ import {
   Activity, ArrowUpRight, BellRing, CalendarDays, CheckCircle2, ChevronRight,
   CircleDollarSign, Clock3, LayoutDashboard, LogOut, Menu, MessageCircleMore,
   Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, UsersRound,
-  WandSparkles, X, XCircle
+  WandSparkles, X, XCircle, HelpCircle
 } from 'lucide-react'
 import { supabase, supabaseConfigured } from './supabase'
+import { LegalPage, isLegalPath } from './legal'
+import { HelpCenter, HelpBubble } from './help'
+import '@fontsource/dm-sans/400.css'
+import '@fontsource/dm-sans/500.css'
+import '@fontsource/dm-sans/600.css'
+import '@fontsource/dm-sans/700.css'
+import '@fontsource/manrope/600.css'
+import '@fontsource/manrope/700.css'
+import '@fontsource/manrope/800.css'
 import './styles.css'
 
 const demoAppointments = [
@@ -28,6 +37,15 @@ const money = (v) => new Intl.NumberFormat('en-US', {
 }).format(v || 0)
 
 function App() {
+  const path = window.location.pathname.replace(/\/+$/, '') || '/'
+  if (isLegalPath(path)) return <><LegalPage path={path} /><HelpBubble /></>
+  if (path === '/help') return <HelpCenter />
+  const query = new URLSearchParams(window.location.search)
+  const isPublicAction = query.get('action') && query.get('token')
+  return <><AppContent />{!isPublicAction && <HelpBubble />}</>
+}
+
+function AppContent() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const [demo, setDemo] = useState(!supabaseConfigured)
@@ -180,6 +198,7 @@ function BillingSetupScreen({ billing, onReady }) {
         {busy ? 'Opening Razorpay…' : 'Authorize & start trial'}
       </button>
       <small>*Razorpay may perform a small mandate/authentication transaction depending on the payment method.</small>
+      <small className="renewal-note">Your subscription starts automatically when the {plan?.trial_days || 7}-day trial ends and renews every {plan?.period === 'yearly' ? 'year' : 'month'} at {formattedAmount} plus applicable taxes until you cancel. Cancel any time before the trial ends and you won't be charged. By continuing you agree to the <a href="/terms" target="_blank" rel="noreferrer">Terms of Service</a> and <a href="/refunds" target="_blank" rel="noreferrer">Refund &amp; Cancellation Policy</a>.</small>
       {message && <div className="form-msg">{message}</div>}
     </div>
   </div>
@@ -331,6 +350,7 @@ function AuthScreen({ onDemo }) {
   const [otpStep, setOtpStep] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
+  const [agreed, setAgreed] = useState(false)
 
   async function submit(e) {
     e.preventDefault()
@@ -355,7 +375,17 @@ function AuthScreen({ onDemo }) {
       return
     }
 
-    const { data, error } = await supabase.auth.signUp({ email, password })
+    if (!agreed) {
+      setBusy(false)
+      setMsg('Please agree to the Terms of Service and Privacy Policy to continue.')
+      return
+    }
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { terms_accepted_at: new Date().toISOString(), terms_version: '2026-09-29' } }
+    })
     setBusy(false)
     if (error) {
       setMsg(error.message)
@@ -364,7 +394,7 @@ function AuthScreen({ onDemo }) {
 
     if (data.session) return
     setOtpStep(true)
-    setMsg('We sent a 6-digit verification code to your email.')
+    setMsg('We sent a verification code to your email.')
   }
 
   function switchMode() {
@@ -405,6 +435,10 @@ function AuthScreen({ onDemo }) {
           <input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@business.com"/>
           <label>Password</label>
           <input required minLength={6} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"/>
+          {mode === 'signup' && <label className="consent">
+            <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} required/>
+            <span>I'm signing up for business use and agree to the <a href="/terms" target="_blank" rel="noreferrer">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>, including the <a href="/dpa" target="_blank" rel="noreferrer">Data Processing Addendum</a>.</span>
+          </label>}
         </>}
 
         {otpStep && <>
@@ -444,6 +478,9 @@ function AuthScreen({ onDemo }) {
 
         <div className="or"><span>or</span></div>
         <button type="button" className="ghost wide" onClick={onDemo}>Explore demo workspace <ArrowUpRight size={16}/></button>
+        <nav className="auth-links">
+          <a href="/help">Help</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/cookies">Cookies</a><a href="/contact">Contact</a>
+        </nav>
       </form>
     </section>
   </div>
@@ -603,6 +640,7 @@ function Dashboard({ session, demo, onExitDemo }) {
         </button>)}
       </nav>
       <div className="sidebar-bottom">
+        <button onClick={() => { window.location.href = '/help' }}><HelpCircle size={18}/>Help Center</button>
         <button className={nav === 'Settings' ? 'active' : ''} onClick={() => setNav('Settings')}><Settings size={18}/>Settings</button>
         <button onClick={signOut}><LogOut size={18}/>{demo ? 'Exit demo' : 'Sign out'}</button>
       </div>
