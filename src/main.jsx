@@ -46,7 +46,7 @@ function App() {
   const publicAction = query.get('action')
   const publicToken = query.get('token')
 
-  if (publicAction && publicToken && ['confirm','cancel','reschedule'].includes(publicAction)) {
+  if (publicAction && publicToken && ['confirm','cancel','reschedule','recovery'].includes(publicAction)) {
     return <PublicActionPage action={publicAction} token={publicToken} />
   }
 
@@ -56,55 +56,138 @@ function App() {
 }
 
 function PublicActionPage({ action, token }) {
-  const [state, setState] = useState(action === 'reschedule' ? 'ready' : 'working')
+  const query = new URLSearchParams(window.location.search)
+  const recoveryDecision = query.get('decision')
+  const [state, setState] = useState(action === 'reschedule' ? 'choose-date' : 'working')
   const [message, setMessage] = useState('')
-  const [when, setWhen] = useState('')
+  const [date, setDate] = useState('')
+  const [slots, setSlots] = useState([])
+  const [selectedStart, setSelectedStart] = useState('')
 
   useEffect(() => {
-    if (action === 'confirm' || action === 'cancel') {
-      ;(async () => {
-        const { data, error } = await supabase.functions.invoke('slotrecover-public-action', {
-          body: { type: 'appointment', token, action }
-        })
-        if (error || data?.error) {
-          setState('error')
-          setMessage(error?.message || data?.message || data?.error || 'Unable to process this request.')
-          return
-        }
-        setState('success')
-        setMessage(action === 'confirm' ? 'Your appointment is confirmed.' : 'Your appointment has been cancelled.')
-      })()
-    }
-  }, [action, token])
+    if (action === 'confirm' || action === 'cancel') runAppointmentAction(action)
+    if (action === 'recovery' && ['accept','decline'].includes(recoveryDecision)) runRecoveryAction(recoveryDecision)
+  }, [action, token, recoveryDecision])
 
-  async function submitReschedule(e) {
-    e.preventDefault()
-    setState('working')
-    const { data, error } = await supabase.functions.invoke('slotrecover-public-action', {
-      body: { type: 'appointment', token, action: 'reschedule', start_at: new Date(when).toISOString() }
-    })
-    if (error || data?.error || data?.ok === false) {
-      setState('error')
-      setMessage(data?.reason === 'slot_unavailable' ? 'That time is no longer available. Please choose another time.' : error?.message || data?.message || data?.error || 'Unable to reschedule.')
-      return
-    }
-    setState('success')
-    setMessage('Your appointment has been rescheduled and confirmed.')
+  async function invoke(body) {
+    const { data, error } = await supabase.functions.invoke('slotrecover-public-action', { body })
+    if (error || data?.error) throw new Error(error?.message || data?.message || data?.error || 'Unable to process this request.')
+    return data
   }
+
+  async function runAppointmentAction(nextAction) {
+    try {
+      setState('working')
+      await invoke({ type:'appointment', token, action:nextAction })
+      setState('success')
+      setMessage(nextAction === 'confirm'
+        ? 'Your appointment is confirmed.'
+        : 'Your appointment has been cancelled. Any matching waitlist recovery can now begin.')
+    } catch (e) {
+      setState('error'); setMessage(e.message)
+    }
+  }
+
+  async function runRecoveryAction(decision) {
+    try {
+      setState('working')
+      const data = await invoke({ type:'recovery', token, action:decision })
+      if (data?.ok === false) throw new Error(data?.reason === 'offer_expired' ? 'This offer has expired.' : 'This slot is no longer available.')
+      setState('success')
+      setMessage(decision === 'accept' ? 'The appointment is yours. Your booking is confirmed.' : 'Thanks — we’ll offer the slot to the next matching person.')
+    } catch (e) {
+      setState('error'); setMessage(e.message)
+    }
+  }
+
+  async function findSlots(e) {
+    e.preventDefault()
+    try {
+      setState('loading-slots')
+      const data = await invoke({ type:'appointment', token, action:'availability', date })
+      const nextSlots = data?.slots || []
+      setSlots(nextSlots)
+      setState('slots')
+      setMessage(nextSlots.length ? '' : 'No open times are available on this date.')
+    } catch (e) {
+      setState('error'); setMessage(e.message)
+    }
+  }
+
+  async function chooseSlot(startAt) {
+    try {
+      setSelectedStart(startAt)
+      setState('working')
+      const data = await invoke({ type:'appointment', token, action:'reschedule', start_at:startAt })
+      if (data?.ok === false) {
+        setState('slot-conflict')
+        setMessage('That time was just booked. Choose another available time or join the waitlist.')
+        return
+      }
+      setState('success')
+      setMessage('Your appointment has been rescheduled and confirmed.')
+    } catch (e) {
+      setState('slot-conflict')
+      setMessage(e.message.includes('slot_unavailable') ? 'That time was just booked. Choose another available time or join the waitlist.' : e.message)
+    }
+  }
+
+  async function joinWaitlist() {
+    try {
+      if (!date) return
+      setState('working')
+      const start = new Date(date + 'T09:00:00')
+      const end = new Date(date + 'T18:00:00')
+      await invoke({
+        type:'appointment',
+        token,
+        action:'join_waitlist',
+        window_start:start.toISOString(),
+        window_end:end.toISOString()
+      })
+      setState('success')
+      setMessage('You’ve been added to the waitlist for that date. We’ll contact you if a matching slot opens.')
+    } catch (e) {
+      setState('error'); setMessage(e.message)
+    }
+  }
+
+  const title = action === 'confirm' ? 'Confirm appointment'
+    : action === 'cancel' ? 'Cancel appointment'
+    : action === 'recovery' ? 'Waitlist offer'
+    : 'Reschedule appointment'
 
   return <div className="public-shell">
     <div className="public-card">
       <div className="public-brand">SlotRecover</div>
       <div className="public-icon">{state === 'success' ? <CheckCircle2 size={30}/> : action === 'cancel' ? <XCircle size={30}/> : <CalendarDays size={30}/>}</div>
-      <div className="eyebrow-dark">APPOINTMENT RESPONSE</div>
-      <h1>{action === 'confirm' ? 'Confirm appointment' : action === 'cancel' ? 'Cancel appointment' : 'Reschedule appointment'}</h1>
-      {action === 'reschedule' && state === 'ready' ? <form className="public-form" onSubmit={submitReschedule}>
-        <p>Choose your preferred date and time. SlotRecover will verify that the time is still available before moving your appointment.</p>
-        <label>Preferred date & time</label>
-        <input type="datetime-local" required value={when} onChange={e => setWhen(e.target.value)} />
-        <button className="primary wide">Check & reschedule</button>
-      </form> : <p className="public-message">{state === 'working' ? 'Processing your request…' : message}</p>}
-      {state === 'error' && action === 'reschedule' && <button className="ghost wide" onClick={() => { setState('ready'); setMessage('') }}>Choose another time</button>}
+      <div className="eyebrow-dark">{action === 'recovery' ? 'WAITLIST RECOVERY' : 'APPOINTMENT RESPONSE'}</div>
+      <h1>{title}</h1>
+
+      {action === 'reschedule' && state === 'choose-date' && <form className="public-form" onSubmit={findSlots}>
+        <p>Choose a date and we’ll show only times that are currently available.</p>
+        <label>Preferred date</label>
+        <input type="date" required value={date} onChange={e => setDate(e.target.value)} />
+        <button className="primary wide">Show available times</button>
+      </form>}
+
+      {action === 'reschedule' && (state === 'slots' || state === 'slot-conflict') && <>
+        {message && <p className="public-message">{message}</p>}
+        {slots.length > 0 && <div className="slot-grid">
+          {slots.map(s => <button key={s.start_at} className="slot-btn" onClick={() => chooseSlot(s.start_at)}>
+            {new Date(s.start_at).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' })}
+          </button>)}
+        </div>}
+        <div className="public-actions">
+          <button className="ghost" onClick={() => { setState('choose-date'); setSlots([]); setMessage('') }}>Choose another date</button>
+          <button className="ghost" onClick={joinWaitlist}>Join waitlist for this date</button>
+        </div>
+      </>}
+
+      {state === 'loading-slots' && <p className="public-message">Checking live availability…</p>}
+      {state === 'working' && <p className="public-message">Processing your request…</p>}
+      {(state === 'success' || state === 'error') && <p className="public-message">{message}</p>}
+      {state === 'error' && action === 'reschedule' && <button className="ghost wide" onClick={() => { setState('choose-date'); setMessage('') }}>Try another date</button>}
     </div>
   </div>
 }
