@@ -98,8 +98,15 @@ function BillingSetupScreen({ billing, onReady }) {
       body: { action: 'create_subscription' }
     })
     if (error || data?.error) {
+      let detail = data?.message || data?.error || error?.message || 'Unable to start Razorpay.'
+      try {
+        if (error?.context?.json) {
+          const body = await error.context.json()
+          detail = body?.message || body?.error || detail
+        }
+      } catch {}
       setBusy(false)
-      setMessage(data?.message || error?.message || 'Unable to start Razorpay.')
+      setMessage(detail)
       return
     }
 
