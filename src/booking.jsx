@@ -127,21 +127,13 @@ export function AppointmentModal({ practiceId, practice, services, onClose, onSa
             <span>Add {form.first_name.trim() || 'this client'} to the waitlist. If this slot opens up, SlotRecover offers it to them automatically.</span>
             <div className="waitlist-actions">
               <button type="button" className="primary small" disabled={busy} onClick={() => addToWaitlist(taken.start_at, taken.end_at)}><ListPlus size={15}/>Waitlist for {timeLabel(taken.start_at)}</button>
-              <button type="button" className="ghost small" disabled={busy || !avail?.day_start} onClick={() => addToWaitlist(avail.day_start, avail.day_end)}>Any time this day</button>
               <button type="button" className="text-btn" onClick={() => setTaken(null)}>Choose another time</button>
             </div>
           </div>
         </div>}
 
-        {!loading && !taken && !avail?.closed && slots.length > 0 && freeCount === 0 && <div className="waitlist-offer">
-          <CalendarClock size={18}/>
-          <div>
-            <strong>This day is fully booked.</strong>
-            <span>Add the client to the waitlist for this day, or try another date.</span>
-            <div className="waitlist-actions">
-              <button type="button" className="primary small" disabled={busy} onClick={() => addToWaitlist(avail.day_start, avail.day_end)}><ListPlus size={15}/>Waitlist for this day</button>
-            </div>
-          </div>
+        {!loading && !taken && !avail?.closed && slots.length > 0 && freeCount === 0 && <div className="slot-hint">
+          This day is fully booked. Click a booked time to add the client to its waitlist, or try another date.
         </div>}
       </div>
 

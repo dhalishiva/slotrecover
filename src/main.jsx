@@ -448,7 +448,7 @@ function Brand() {
 function Dashboard({ session, demo, onExitDemo }) {
   const [nav, setNav] = useState('Overview')
   const [mobileNav, setMobileNav] = useState(false)
-  const [practiceName, setPracticeName] = useState('Atelier No. 7')
+  const [practiceName, setPracticeName] = useState(demo ? 'Atelier No. 7' : '')
   const [practiceId, setPracticeId] = useState(null)
   const [practice, setPractice] = useState(null)
   const [services, setServices] = useState([])
@@ -456,7 +456,9 @@ function Dashboard({ session, demo, onExitDemo }) {
   const [needsSetup, setNeedsSetup] = useState(false)
   const [modal, setModal] = useState(null)
   const [toast, setToast] = useState('')
-  const [data, setData] = useState({
+  const emptyData = { appointments: [], revenue: 0, atRisk: 0, recoveryRate: 0, noShow: 0, recoveredSlots: 0, cancelledSlots: 0, activity: [], waitlist: [] }
+  const [loaded, setLoaded] = useState(demo)
+  const [data, setData] = useState(!demo ? emptyData : {
     appointments: demoAppointments,
     revenue: 2840,
     atRisk: 335,
@@ -483,6 +485,7 @@ function Dashboard({ session, demo, onExitDemo }) {
     if (practiceError) {
       notify(practiceError.message)
       setBusy(false)
+      setLoaded(true)
       return
     }
     if (!practices?.length) {
@@ -493,6 +496,7 @@ function Dashboard({ session, demo, onExitDemo }) {
       setServices([])
       setNeedsSetup(true)
       setBusy(false)
+      setLoaded(true)
       return
     }
 
@@ -572,6 +576,7 @@ function Dashboard({ session, demo, onExitDemo }) {
       }))
     })
     setBusy(false)
+    setLoaded(true)
   }
 
   async function signOut() {
@@ -589,8 +594,8 @@ function Dashboard({ session, demo, onExitDemo }) {
       <Brand />
       <button className="close-nav" onClick={() => setMobileNav(false)}><X size={20}/></button>
       <div className="practice-chip">
-        <div className="avatar">{practiceName.slice(0,2).toUpperCase()}</div>
-        <div><strong>{practiceName}</strong><span>{demo ? 'Demo workspace' : 'Live workspace'}</span></div>
+        <div className="avatar">{(practiceName || '··').slice(0,2).toUpperCase()}</div>
+        <div><strong>{practiceName || 'Loading…'}</strong><span>{demo ? 'Demo workspace' : 'Live workspace'}</span></div>
         <ChevronRight size={16}/>
       </div>
       <nav>
@@ -619,7 +624,8 @@ function Dashboard({ session, demo, onExitDemo }) {
       </header>
 
       {!demo && <BillingBanner session={session} onOpenSettings={() => setNav('Settings')} />}
-      {needsSetup && !demo ? <Onboarding session={session} onDone={loadLive}/> :
+      {!loaded ? <div className="boot inline"><div className="spinner" />Loading your workspace…</div> :
+        needsSetup && !demo ? <Onboarding session={session} onDone={loadLive}/> :
         nav === 'Overview' ? <Overview data={data} busy={busy} refresh={loadLive} demo={demo} onNew={() => setModal('appointment')}/> :
         nav === 'Appointments' ? <Appointments appointments={data.appointments} onNew={() => setModal('appointment')}/> :
         nav === 'Recovery' ? <Recovery waitlist={data.waitlist} onNew={() => setModal('appointment')}/> :
