@@ -141,3 +141,6 @@ a.chip:hover{border-color:#b8bcff;color:var(--ink)}
   .consent{flex-direction:column;align-items:stretch}
 }
 @media(max-width:480px){.footer-in{grid-template-columns:1fr}.hero-cta .btn{width:100%}}
+
+/* Honour the hidden attribute even on elements that set their own display */
+[hidden]{display:none!important}
