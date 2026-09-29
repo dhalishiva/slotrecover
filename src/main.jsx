@@ -31,6 +31,8 @@ function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const [demo, setDemo] = useState(!supabaseConfigured)
+  const [billing, setBilling] = useState(null)
+  const [billingLoading, setBillingLoading] = useState(false)
 
   useEffect(() => {
     if (!supabase) { setLoading(false); return }
@@ -42,6 +44,23 @@ function App() {
     return () => sub.subscription.unsubscribe()
   }, [])
 
+  useEffect(() => {
+    if (!session || !supabase || demo) {
+      setBilling(null)
+      setBillingLoading(false)
+      return
+    }
+    setBillingLoading(true)
+    supabase.from('billing_accounts')
+      .select('status,trial_started_at,trial_ends_at,razorpay_subscription_id,authorization_verified_at,billing_plans(name,amount_paise,currency,period,trial_days)')
+      .eq('user_id', session.user.id)
+      .single()
+      .then(({ data }) => {
+        setBilling(data || null)
+        setBillingLoading(false)
+      })
+  }, [session?.user?.id, demo])
+
   const query = new URLSearchParams(window.location.search)
   const publicAction = query.get('action')
   const publicToken = query.get('token')
@@ -50,10 +69,101 @@ function App() {
     return <PublicActionPage action={publicAction} token={publicToken} />
   }
 
-  if (loading) return <div className="boot"><div className="spinner" />Loading workspace…</div>
+  if (loading || (session && !demo && billingLoading)) return <div className="boot"><div className="spinner" />Loading workspace…</div>
   if (!session && !demo) return <AuthScreen onDemo={() => setDemo(true)} />
+  if (session && !demo && billing && !['authenticated','active'].includes(billing.status)) {
+    return <BillingSetupScreen billing={billing} onReady={() => window.location.reload()} />
+  }
   return <Dashboard session={session} demo={demo} onExitDemo={() => setDemo(false)} />
 }
+
+function BillingSetupScreen({ billing, onReady }) {
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+
+  async function loadRazorpay() {
+    if (window.Razorpay) return true
+    return await new Promise(resolve => {
+      const script = document.createElement('script')
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+      script.onload = () => resolve(true)
+      script.onerror = () => resolve(false)
+      document.body.appendChild(script)
+    })
+  }
+
+  async function startBilling() {
+    setBusy(true); setMessage('')
+    const { data, error } = await supabase.functions.invoke('slotrecover-billing', {
+      body: { action: 'create_subscription' }
+    })
+    if (error || data?.error) {
+      setBusy(false)
+      setMessage(data?.message || error?.message || 'Unable to start Razorpay.')
+      return
+    }
+
+    const loaded = await loadRazorpay()
+    if (!loaded) {
+      setBusy(false)
+      setMessage('Unable to load Razorpay Checkout.')
+      return
+    }
+
+    const checkout = new window.Razorpay({
+      key: data.key_id,
+      subscription_id: data.subscription_id,
+      name: 'SlotRecover',
+      description: data.description,
+      prefill: data.prefill,
+      theme: { color: '#17191e' },
+      handler: async response => {
+        const { data: verified, error: verifyError } = await supabase.functions.invoke('slotrecover-billing', {
+          body: {
+            action: 'verify_checkout',
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_subscription_id: response.razorpay_subscription_id,
+            razorpay_signature: response.razorpay_signature
+          }
+        })
+        if (verifyError || verified?.error) {
+          setBusy(false)
+          setMessage(verified?.message || verifyError?.message || 'Authorization could not be verified.')
+          return
+        }
+        setBusy(false)
+        onReady()
+      },
+      modal: { ondismiss: () => setBusy(false) }
+    })
+
+    checkout.open()
+  }
+
+  const trialEnd = new Date(billing.trial_ends_at)
+  const daysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / 86400000))
+  const plan = billing.billing_plans
+
+  return <div className="billing-setup-shell">
+    <div className="billing-setup-card">
+      <Brand />
+      <div className="billing-pill">7-DAY FREE TRIAL</div>
+      <h1>Start your SlotRecover trial.</h1>
+      <p>Authorize Razorpay now. Your subscription billing is scheduled to begin after the 7-day trial ends.</p>
+      <div className="billing-summary">
+        <div><span>Trial period</span><strong>{daysLeft || 7} days</strong></div>
+        <div><span>Test plan</span><strong>{plan?.currency === 'INR' ? '₹' : ''}{((plan?.amount_paise || 0)/100).toFixed(0)} / {plan?.period || 'month'}</strong></div>
+        <div><span>Charge today</span><strong>₹0*</strong></div>
+      </div>
+      <button className="primary wide" onClick={startBilling} disabled={busy}>
+        {busy ? 'Opening Razorpay…' : 'Authorize & start trial'}
+      </button>
+      <small>*Razorpay may perform a small mandate/authentication transaction depending on the payment method.</small>
+      {message && <div className="form-msg">{message}</div>}
+    </div>
+  </div>
+}
+
 
 function PublicActionPage({ action, token }) {
   const query = new URLSearchParams(window.location.search)
