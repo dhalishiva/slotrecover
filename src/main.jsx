@@ -9,7 +9,7 @@ import {
 import { supabase, supabaseConfigured } from './supabase'
 import { LegalPage, isLegalPath } from './legal'
 import { HelpCenter, HelpBubble } from './help'
-import { money, setMoneyCurrency } from './ui'
+import { money, setMoneyCurrency, LogoMark } from './ui'
 import { hasAccess, startCheckout, fetchBillingStatus, accessUntil } from './billingClient'
 import { SettingsPage } from './settings'
 import { AppointmentModal } from './booking'
@@ -467,7 +467,7 @@ function AuthScreen({ onDemo }) {
 }
 
 function Brand() {
-  return <div className="brand"><div className="logo-mark"><RefreshCw size={17}/></div>SlotRecover</div>
+  return <div className="brand"><LogoMark size={31}/>SlotRecover</div>
 }
 
 function Dashboard({ session, demo, onExitDemo }) {

@@ -23,6 +23,12 @@ function noteHtml(note?: string | null) {
   return '<p style="margin-top:18px;padding:12px;border-radius:8px;background:#f6f7f9;color:#444;font-size:14px"><strong>Note:</strong> ' + esc(note).replace(/\n/g, "<br>") + '</p>';
 }
 
+function footerHtml(appUrl: string) {
+  return '<p style="margin-top:28px;padding-top:14px;border-top:1px solid #eee;font-size:12px;color:#999">' +
+    '<img src="' + appUrl + '/icons/icon-192.png" width="16" height="16" alt="" style="vertical-align:-3px;border-radius:4px;margin-right:6px">' +
+    'Sent with <a href="' + appUrl + '" style="color:#4a51dc;text-decoration:none">SlotRecover</a></p>';
+}
+
 function formatPrice(cents: number, currency?: string | null) {
   try {
     return new Intl.NumberFormat("en-US", { style: "currency", currency: currency || "USD", maximumFractionDigits: 0 }).format((cents || 0) / 100);
@@ -103,6 +109,7 @@ Deno.serve(async (req) => {
           '<p>Your <strong>' + esc(appt.services.name) + '</strong> appointment' + withWho + business + ' is scheduled for <strong>' + start + '</strong>.</p>' +
           '<p><a href="' + confirmUrl + '">Confirm</a>&nbsp;&nbsp; <a href="' + rescheduleUrl + '">Reschedule</a>&nbsp;&nbsp; <a href="' + cancelUrl + '">Cancel</a></p>' +
           noteHtml(appt.practices?.client_note) +
+          footerHtml(appUrl) +
           '</div>',
       });
 
@@ -164,6 +171,7 @@ Deno.serve(async (req) => {
           '<p><strong>' + esc(offer.appointments.services.name) + '</strong>' + offerStaff + '<br>' + start + '<br>' + price + '</p>' +
           '<p>This offer expires soon.</p>' +
           '<p><a href="' + acceptUrl + '">Take this slot</a>&nbsp;&nbsp; <a href="' + declineUrl + '">Not interested</a></p>' +
+          footerHtml(appUrl) +
           '</div>',
       });
       await admin.from("recovery_offers").update({ notified_at: now.toISOString(), notification_error: null }).eq("id", offer.id);

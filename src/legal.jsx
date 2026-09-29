@@ -1,6 +1,7 @@
 import React from 'react'
 import { ArrowLeft, RefreshCw } from 'lucide-react'
 import { site } from './siteConfig'
+import { LogoMark } from './ui'
 
 const S = ({ h, children }) => <section><h2>{h}</h2>{children}</section>
 const Mail = ({ to }) => <a href={'mailto:' + to}>{to}</a>
@@ -334,7 +335,7 @@ export const isLegalPath = (path) => Boolean(docs[path])
 
 export function SiteHeader() {
   return <header className="site-header">
-    <a href="/" className="site-brand"><span className="logo-mark"><RefreshCw size={16}/></span>{site.product}</a>
+    <a href="/" className="site-brand"><LogoMark size={30}/>{site.product}</a>
     <a href="/" className="site-back"><ArrowLeft size={15}/> Back to app</a>
   </header>
 }
