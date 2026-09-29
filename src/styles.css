@@ -278,3 +278,35 @@
 
 .boot.inline{min-height:calc(100vh - 64px)}
 .slot-hint{margin-top:10px;font-size:12px;color:#7a7f89;text-align:center}
+
+/* ---- Staff ---- */
+.staff-picker{display:flex;flex-direction:column;gap:7px}
+.staff-picker>span{font-size:11px;font-weight:700;color:#353941}
+.chip-row{display:flex;flex-wrap:wrap;gap:6px}
+.chip{height:32px;padding:0 12px;border-radius:99px;border:1px solid #dfe2e8;background:#fff;font-size:12px;font-weight:700;color:#5d616a}
+.chip.on{background:#17191e;border-color:#17191e;color:#fff}
+.slot-btn small.free{color:#27a36e}
+.slot-btn.selected small.free{color:#9fe3c3}
+.staff-list{display:flex;flex-direction:column;gap:10px}
+.staff-card{border:1px solid #eceef1;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.staff-card.inactive{opacity:.6}
+.staff-top{display:grid;grid-template-columns:29px 1fr 44px 76px;gap:10px;align-items:center}
+.staff-top input:not([type=checkbox]){height:40px;border:1px solid #dfe2e8;border-radius:9px;padding:0 10px;min-width:0;width:100%}
+.staff-top .ghost.small:disabled{opacity:.45;cursor:default}
+.settings-warning{margin-top:12px;padding:10px 12px;border-radius:10px;background:#fff8ef;border:1px solid #f3dcc0;color:#8b4d23;font-size:12px}
+.field textarea{width:100%;border:1px solid #dfe2e8;border-radius:10px;padding:10px 12px;font:inherit;resize:vertical;outline:none}
+.field textarea:focus{border-color:#6c73ff;box-shadow:0 0 0 3px rgba(108,115,255,.1)}
+.appt-staff{color:#6a6fd8}
+
+/* ---- WhatsApp ---- */
+.appt-row.with-action{grid-template-columns:72px 1.6fr 70px 115px 40px}
+.appt-action{display:flex;justify-content:flex-end}
+.wa-btn{width:34px;height:34px;border-radius:9px;border:1px solid #cfeedd;background:#effaf4;color:#1c9c5a;display:grid;place-items:center}
+.wa-btn:hover{background:#dff5e9}
+.whatsapp-btn{background:#1faa59;text-decoration:none}
+.whatsapp-btn:hover{background:#1a9550}
+.appt-staff{font-weight:700}
+@media(max-width:760px){.appt-row.with-action{grid-template-columns:60px 1fr 90px 40px}}
+
+.staff-picker.public{margin:6px 0 4px}
+.public-tz{font-size:11px;color:#8a8e97;margin:-6px 0 8px}

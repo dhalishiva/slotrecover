@@ -13,6 +13,7 @@ import { money, setMoneyCurrency } from './ui'
 import { hasAccess, startCheckout, fetchBillingStatus, accessUntil } from './billingClient'
 import { SettingsPage } from './settings'
 import { AppointmentModal } from './booking'
+import { ReminderModal, fetchReminderAppointment, reminderSelect } from './whatsapp'
 import '@fontsource/dm-sans/400.css'
 import '@fontsource/dm-sans/500.css'
 import '@fontsource/dm-sans/600.css'
@@ -168,6 +169,8 @@ function PublicActionPage({ action, token }) {
   const [date, setDate] = useState('')
   const [slots, setSlots] = useState([])
   const [selectedStart, setSelectedStart] = useState('')
+  const [avail, setAvail] = useState(null)
+  const [staffId, setStaffId] = useState('')
 
   useEffect(() => {
     if (action === 'confirm' || action === 'cancel') runAppointmentAction(action)
@@ -205,25 +208,38 @@ function PublicActionPage({ action, token }) {
     }
   }
 
-  async function findSlots(e) {
-    e.preventDefault()
+  async function loadAvailability(forStaff) {
     try {
       setState('loading-slots')
-      const data = await invoke({ type:'appointment', token, action:'availability', date })
+      const data = await invoke({ type:'appointment', token, action:'availability', date, staff_id: forStaff || null })
       const nextSlots = data?.slots || []
+      setAvail(data)
       setSlots(nextSlots)
       setState('slots')
-      setMessage(nextSlots.length ? '' : 'No open times are available on this date.')
+      setMessage(data?.closed ? 'We’re closed on this date. Please choose another day.' : nextSlots.length ? '' : 'No open times are available on this date.')
     } catch (e) {
       setState('error'); setMessage(e.message)
     }
   }
 
+  function findSlots(e) {
+    e.preventDefault()
+    loadAvailability(staffId)
+  }
+
+  function pickStaff(id) {
+    setStaffId(id)
+    loadAvailability(id)
+  }
+
+  const publicTz = avail?.timezone
+  const publicTime = iso => new Date(iso).toLocaleTimeString([], { hour:'numeric', minute:'2-digit', timeZone: publicTz || undefined })
+
   async function chooseSlot(startAt) {
     try {
       setSelectedStart(startAt)
       setState('working')
-      const data = await invoke({ type:'appointment', token, action:'reschedule', start_at:startAt })
+      const data = await invoke({ type:'appointment', token, action:'reschedule', start_at:startAt, staff_id: staffId || null })
       if (data?.ok === false) {
         setState('slot-conflict')
         setMessage('That time was just booked. Choose another available time or join the waitlist.')
@@ -239,16 +255,15 @@ function PublicActionPage({ action, token }) {
 
   async function joinWaitlist() {
     try {
-      if (!date) return
+      if (!date || !avail?.day_start) return
       setState('working')
-      const start = new Date(date + 'T09:00:00')
-      const end = new Date(date + 'T18:00:00')
       await invoke({
         type:'appointment',
         token,
         action:'join_waitlist',
-        window_start:start.toISOString(),
-        window_end:end.toISOString()
+        window_start: avail.day_start,
+        window_end: avail.day_end,
+        staff_id: staffId || null
       })
       setState('success')
       setMessage('You’ve been added to the waitlist for that date. We’ll contact you if a matching slot opens.')
@@ -264,7 +279,7 @@ function PublicActionPage({ action, token }) {
 
   return <div className="public-shell">
     <div className="public-card">
-      <div className="public-brand">SlotRecover</div>
+      <div className="public-brand">{avail?.business_name || 'SlotRecover'}</div>
       <div className="public-icon">{state === 'success' ? <CheckCircle2 size={30}/> : action === 'cancel' ? <XCircle size={30}/> : <CalendarDays size={30}/>}</div>
       <div className="eyebrow-dark">{action === 'recovery' ? 'WAITLIST RECOVERY' : 'APPOINTMENT RESPONSE'}</div>
       <h1>{title}</h1>
@@ -277,15 +292,23 @@ function PublicActionPage({ action, token }) {
       </form>}
 
       {action === 'reschedule' && (state === 'slots' || state === 'slot-conflict') && <>
+        {(avail?.staff?.length || 0) > 1 && <div className="staff-picker public">
+          <span>Who would you like to see?</span>
+          <div className="chip-row">
+            <button type="button" className={'chip' + (!staffId ? ' on' : '')} onClick={() => pickStaff('')}>Any available</button>
+            {avail.staff.map(st => <button type="button" key={st.id} className={'chip' + (staffId === st.id ? ' on' : '')} onClick={() => pickStaff(st.id)}>{st.name}</button>)}
+          </div>
+        </div>}
         {message && <p className="public-message">{message}</p>}
         {slots.length > 0 && <div className="slot-grid">
           {slots.map(s => <button key={s.start_at} className="slot-btn" onClick={() => chooseSlot(s.start_at)}>
-            {new Date(s.start_at).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' })}
+            {publicTime(s.start_at)}
           </button>)}
         </div>}
+        {publicTz && slots.length > 0 && <p className="public-tz">Times shown in {publicTz.replace(/_/g, ' ')}.</p>}
         <div className="public-actions">
           <button className="ghost" onClick={() => { setState('choose-date'); setSlots([]); setMessage('') }}>Choose another date</button>
-          <button className="ghost" onClick={joinWaitlist}>Join waitlist for this date</button>
+          {!avail?.closed && <button className="ghost" onClick={joinWaitlist}>Join waitlist for this date</button>}
         </div>
       </>}
 
@@ -456,6 +479,7 @@ function Dashboard({ session, demo, onExitDemo }) {
   const [needsSetup, setNeedsSetup] = useState(false)
   const [modal, setModal] = useState(null)
   const [toast, setToast] = useState('')
+  const [reminder, setReminder] = useState(null)
   const emptyData = { appointments: [], revenue: 0, atRisk: 0, recoveryRate: 0, noShow: 0, recoveredSlots: 0, cancelledSlots: 0, activity: [], waitlist: [] }
   const [loaded, setLoaded] = useState(demo)
   const [data, setData] = useState(!demo ? emptyData : {
@@ -473,6 +497,15 @@ function Dashboard({ session, demo, onExitDemo }) {
   useEffect(() => {
     if (!demo && session && supabase) loadLive()
   }, [demo, session])
+
+  // Notifications open /?remind=<appointment id> to jump straight to the WhatsApp reminder.
+  useEffect(() => {
+    if (demo || !loaded || !practice) return
+    const id = new URLSearchParams(window.location.search).get('remind')
+    if (!id) return
+    window.history.replaceState({}, '', window.location.pathname)
+    fetchReminderAppointment(id).then(a => a && setReminder(a)).catch(() => notify('Appointment not found'))
+  }, [loaded, practice, demo])
 
   function notify(message) {
     setToast(message)
@@ -511,14 +544,14 @@ function Dashboard({ session, demo, onExitDemo }) {
     const [{ data: svc }, { data: appts }, { data: rev }, { data: offers }, { data: waitlist }] = await Promise.all([
       supabase.from('services').select('id,name,duration_minutes,price_cents').eq('practice_id', p.id).eq('active', true).order('created_at'),
       supabase.from('appointments')
-        .select('id,start_at,status,services(name,price_cents),clients(first_name,last_name)')
+        .select(reminderSelect)
         .eq('practice_id', p.id).gte('start_at', today.toISOString()).order('start_at').limit(20),
       supabase.from('revenue_events').select('id,event_type,amount_cents,created_at').eq('practice_id', p.id).order('created_at',{ascending:false}).limit(30),
       supabase.from('recovery_offers')
         .select('id,status,offered_at,expires_at,clients(first_name,last_name),appointments(start_at,services(name,price_cents))')
         .eq('practice_id', p.id).order('offered_at',{ascending:false}).limit(20),
       supabase.from('waitlist_entries')
-        .select('id,status,window_start,window_end,min_notice_minutes,clients(first_name,last_name),services(name,price_cents)')
+        .select('id,status,window_start,window_end,min_notice_minutes,clients(first_name,last_name),services(name,price_cents),staff(name)')
         .eq('practice_id', p.id).order('created_at',{ascending:false}).limit(20)
     ])
 
@@ -530,6 +563,8 @@ function Dashboard({ session, demo, onExitDemo }) {
       date: new Date(a.start_at).toLocaleDateString([], { month:'short', day:'numeric', timeZone: p.timezone }),
       client: [a.clients?.first_name || 'Client', a.clients?.last_name || ''].join(' ').trim(),
       service: a.services?.name || 'Service',
+      staff: a.staff?.name || '',
+      raw: a,
       value: (a.services?.price_cents || 0) / 100,
       status: a.status
     }))
@@ -569,7 +604,7 @@ function Dashboard({ session, demo, onExitDemo }) {
       waitlist: (waitlist || []).map(w => ({
         id:w.id,
         client:[w.clients?.first_name||'Client',w.clients?.last_name||''].join(' ').trim(),
-        service:w.services?.name||'Service',
+        service:(w.services?.name||'Service') + (w.staff?.name ? ' · with ' + w.staff.name : ''),
         status:w.status,
         window:formatWindow(w.window_start, w.window_end, p.timezone),
         value:(w.services?.price_cents||0)/100
@@ -626,8 +661,8 @@ function Dashboard({ session, demo, onExitDemo }) {
       {!demo && <BillingBanner session={session} onOpenSettings={() => setNav('Settings')} />}
       {!loaded ? <div className="boot inline"><div className="spinner" />Loading your workspace…</div> :
         needsSetup && !demo ? <Onboarding session={session} onDone={loadLive}/> :
-        nav === 'Overview' ? <Overview data={data} busy={busy} refresh={loadLive} demo={demo} onNew={() => setModal('appointment')}/> :
-        nav === 'Appointments' ? <Appointments appointments={data.appointments} onNew={() => setModal('appointment')}/> :
+        nav === 'Overview' ? <Overview data={data} busy={busy} refresh={loadLive} demo={demo} onNew={() => setModal('appointment')} onRemind={demo ? null : a => setReminder(a.raw)}/> :
+        nav === 'Appointments' ? <Appointments appointments={data.appointments} onNew={() => setModal('appointment')} onRemind={demo ? null : a => setReminder(a.raw)}/> :
         nav === 'Recovery' ? <Recovery waitlist={data.waitlist} onNew={() => setModal('appointment')}/> :
         nav === 'Clients' ? <EmptyPanel title="Client intelligence" text="Client history, confirmation behavior, and waitlist preferences will live here." icon={UsersRound}/> :
         nav === 'Messaging' ? <EmptyPanel title="Messaging center" text="Track confirmation reminders, delivery states, replies, and channel costs." icon={MessageCircleMore}/> :
@@ -638,6 +673,7 @@ function Dashboard({ session, demo, onExitDemo }) {
     {modal === 'appointment' && (demo
       ? <DemoNotice onClose={() => setModal(null)}/>
       : <AppointmentModal practiceId={practiceId} practice={practice} services={services} onClose={() => setModal(null)} onSaved={kind => { setModal(null); notify(kind === 'waitlist' ? 'Added to the waitlist' : 'Appointment created'); loadLive() }}/>)}
+    {reminder && <ReminderModal appointment={reminder} practice={practice} onClose={() => setReminder(null)}/>}
     {toast && <div className="toast">{toast}</div>}
   </div>
 }
@@ -718,7 +754,7 @@ function Onboarding({ session, onDone }) {
   </div>
 }
 
-function Overview({ data, busy, refresh, demo, onNew }) {
+function Overview({ data, busy, refresh, demo, onNew, onRemind }) {
   const today = new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' })
   const activity = demo ? demoActivity : data.activity
   return <div className="page">
@@ -752,7 +788,7 @@ function Overview({ data, busy, refresh, demo, onNew }) {
       <section className="panel">
         <div className="panel-head"><div><h2>Upcoming appointments</h2><p>Live bookings from your workspace.</p></div></div>
         <div className="appointment-list">
-          {data.appointments.length ? data.appointments.slice(0,8).map(a => <AppointmentRow key={a.id} a={a}/>) :
+          {data.appointments.length ? data.appointments.slice(0,8).map(a => <AppointmentRow key={a.id} a={a} onRemind={onRemind}/>) :
             <div className="empty-inline"><CalendarDays size={22}/><strong>No appointments yet</strong><span>Add your first appointment to start tracking revenue.</span></div>}
         </div>
       </section>
@@ -773,27 +809,29 @@ function Metric({ icon: Icon, label, value, hint, tone }) {
   return <div className="metric-card"><div className={'metric-icon ' + tone}><Icon size={18}/></div><div><span>{label}</span><strong>{value}</strong><small>{hint}</small></div></div>
 }
 
-function AppointmentRow({ a }) {
+function AppointmentRow({ a, onRemind }) {
   const map = {
     confirmed:['Confirmed','ok'], awaiting:['Awaiting reply','wait'], 'at-risk':['At risk','danger'],
     recovered:['Recovered','recover'], booked:['Booked','wait'], cancelled:['Cancelled','danger'],
     completed:['Completed','ok'], no_show:['No-show','danger']
   }
   const [label,tone] = map[a.status] || [a.status,'wait']
-  return <div className="appt-row">
+  const canRemind = onRemind && a.raw && ['booked','confirmed'].includes(a.status) && new Date(a.raw.start_at) > new Date()
+  return <div className={'appt-row' + (onRemind ? ' with-action' : '')}>
     <div className="appt-time">{a.date && <small>{a.date}</small>}{a.time}</div>
-    <div className="client-cell"><div className="tiny-avatar">{a.client.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><strong>{a.client}</strong><span>{a.service}</span></div></div>
+    <div className="client-cell"><div className="tiny-avatar">{a.client.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><strong>{a.client}</strong><span>{a.service}{a.staff && <> · <b className="appt-staff">{a.staff}</b></>}</span></div></div>
     <div className="appt-value">{money(a.value)}</div>
     <div><span className={'status ' + tone}>{tone === 'recover' && <RefreshCw size={12}/>} {label}</span></div>
+    {onRemind && <div className="appt-action">{canRemind && <button className="wa-btn" title="Send WhatsApp reminder" aria-label={'Send WhatsApp reminder to ' + a.client} onClick={() => onRemind(a)}><MessageCircleMore size={16}/></button>}</div>}
   </div>
 }
 
-function Appointments({ appointments, onNew }) {
+function Appointments({ appointments, onNew, onRemind }) {
   return <div className="page">
     <div className="page-heading"><div><div className="eyebrow-dark">SCHEDULE</div><h1>Appointments</h1><p>Every booking, confirmation, cancellation, and refill in one place.</p></div><button className="primary" onClick={onNew}><Plus size={17}/>New appointment</button></div>
     <section className="panel table-panel">
       <div className="filters"><button className="filter active">Upcoming</button></div>
-      {appointments.length ? appointments.map(a => <AppointmentRow a={a} key={a.id}/>) : <div className="empty-inline"><CalendarDays size={22}/><strong>No appointments yet</strong><span>Create one to begin scheduling.</span></div>}
+      {appointments.length ? appointments.map(a => <AppointmentRow a={a} key={a.id} onRemind={onRemind}/>) : <div className="empty-inline"><CalendarDays size={22}/><strong>No appointments yet</strong><span>Create one to begin scheduling.</span></div>}
     </section>
   </div>
 }

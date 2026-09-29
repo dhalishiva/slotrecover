@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Building2, Clock3, CreditCard, Plus, Save, Scissors } from 'lucide-react'
+import { Building2, Clock3, CreditCard, MessageSquareText, Plus, Save, Scissors, UsersRound } from 'lucide-react'
 import { supabase } from './supabase'
 import { Field, Modal, money } from './ui'
 import { accessUntil, cancelSubscription, fetchBillingStatus, startCheckout } from './billingClient'
@@ -12,15 +12,19 @@ const hhmm = t => (t || '').slice(0, 5)
 const fmtDate = d => d ? new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
 
 export function SettingsPage({ practice, demo, notify, onChanged }) {
+  const [rev, setRev] = useState(0)
+  const changedAll = () => { setRev(r => r + 1); onChanged() }
   if (demo) {
     return <div className="page"><div className="page-heading"><div><div className="eyebrow-dark">WORKSPACE</div><h1>Settings</h1><p>Settings are available in your live workspace. Sign up to configure hours, services and billing.</p></div></div></div>
   }
   if (!practice) return <div className="page"><div className="empty-inline"><div className="spinner"/></div></div>
   return <div className="page settings-page">
-    <div className="page-heading"><div><div className="eyebrow-dark">WORKSPACE</div><h1>Settings</h1><p>Business details, opening hours, services and your subscription.</p></div></div>
+    <div className="page-heading"><div><div className="eyebrow-dark">WORKSPACE</div><h1>Settings</h1><p>Business details, opening hours, services, staff, client messages and your subscription.</p></div></div>
     <BusinessSection practice={practice} notify={notify} onChanged={onChanged}/>
     <HoursSection practice={practice} notify={notify} onChanged={onChanged}/>
-    <ServicesSection practice={practice} notify={notify} onChanged={onChanged}/>
+    <ServicesSection practice={practice} notify={notify} onChanged={changedAll}/>
+    <StaffSection practice={practice} notify={notify} onChanged={changedAll} rev={rev}/>
+    <ClientMessageSection practice={practice} notify={notify} onChanged={onChanged}/>
     <BillingSection notify={notify}/>
   </div>
 }
@@ -222,5 +226,111 @@ function BillingSection({ notify }) {
         </div>
       </div>
     </Modal>}
+  </Section>
+}
+
+function StaffSection({ practice, notify, onChanged, rev }) {
+  const [rows, setRows] = useState(null)
+  const [services, setServices] = useState([])
+  const [error, setError] = useState('')
+
+  async function load() {
+    const [{ data: st, error: e1 }, { data: sv, error: e2 }, { data: links, error: e3 }] = await Promise.all([
+      supabase.from('staff').select('id,name,active').eq('practice_id', practice.id).order('created_at'),
+      supabase.from('services').select('id,name,active').eq('practice_id', practice.id).order('created_at'),
+      supabase.from('staff_services').select('staff_id,service_id').eq('practice_id', practice.id)
+    ])
+    if (e1 || e2 || e3) return setError((e1 || e2 || e3).message)
+    setServices((sv || []).filter(x => x.active))
+    setRows((st || []).map(r => ({ ...r, services: (links || []).filter(l => l.staff_id === r.id).map(l => l.service_id), dirty: false })))
+  }
+  useEffect(() => { load() }, [practice.id, rev])
+
+  function edit(i, patch) { setRows(rows.map((r, j) => j === i ? { ...r, ...patch, dirty: true } : r)) }
+  function toggleService(i, id) {
+    const cur = rows[i].services
+    edit(i, { services: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id] })
+  }
+  function addRow() { setRows([...(rows || []), { id: null, name: '', active: true, services: services.map(s => s.id), dirty: true }]) }
+
+  async function saveRow(i) {
+    const r = rows[i]; setError('')
+    if (!r.name.trim()) return setError('Staff name is required.')
+    if (!r.services.length) return setError('Choose at least one service for ' + r.name.trim() + '.')
+    let staffId = r.id
+    if (staffId) {
+      const { error } = await supabase.from('staff').update({ name: r.name.trim(), active: r.active }).eq('id', staffId)
+      if (error) return setError(error.message)
+    } else {
+      const { data, error } = await supabase.from('staff').insert({ practice_id: practice.id, name: r.name.trim(), active: r.active }).select('id').single()
+      if (error) return setError(error.message)
+      staffId = data.id
+    }
+    const { data: existing, error: e2 } = await supabase.from('staff_services').select('service_id').eq('staff_id', staffId)
+    if (e2) return setError(e2.message)
+    const have = (existing || []).map(x => x.service_id)
+    const toAdd = r.services.filter(id => !have.includes(id))
+    const toRemove = have.filter(id => !r.services.includes(id) && services.some(s => s.id === id))
+    if (toAdd.length) {
+      const { error } = await supabase.from('staff_services').insert(toAdd.map(id => ({ staff_id: staffId, service_id: id, practice_id: practice.id })))
+      if (error) return setError(error.message)
+    }
+    if (toRemove.length) {
+      const { error } = await supabase.from('staff_services').delete().eq('staff_id', staffId).in('service_id', toRemove)
+      if (error) return setError(error.message)
+    }
+    notify(r.id ? 'Staff member updated' : 'Staff member added'); load(); onChanged()
+  }
+
+  const uncovered = rows ? services.filter(sv => !rows.some(r => r.id && r.active && r.services.includes(sv.id))) : []
+  const activeCount = (rows || []).filter(r => r.id && r.active).length
+
+  return <Section icon={UsersRound} title="Staff" text="Who works here and which services each person offers. A time is bookable when at least one of them is free." action={<button type="button" className="ghost" onClick={addRow}><Plus size={16}/>Add staff</button>}>
+    {!rows ? <div className="spinner"/> : <div className="staff-list">
+      {rows.map((r, i) => <div className={'staff-card' + (r.active ? '' : ' inactive')} key={r.id || 'new' + i}>
+        <div className="staff-top">
+          <div className="tiny-avatar">{(r.name || '?').split(' ').map(x => x[0]).slice(0, 2).join('').toUpperCase()}</div>
+          <input aria-label="Staff name" value={r.name} placeholder="e.g. Priya" onChange={e => edit(i, { name: e.target.value })}/>
+          <label className="switch" title={r.active ? 'Active' : 'Inactive'}><input type="checkbox" checked={r.active} disabled={r.active && r.id && activeCount <= 1} onChange={e => edit(i, { active: e.target.checked })}/><i/></label>
+          <button type="button" className="ghost small" disabled={!r.dirty} onClick={() => saveRow(i)}>{r.id ? 'Save' : 'Add'}</button>
+        </div>
+        <div className="chip-row">
+          {services.map(sv => <button type="button" key={sv.id} className={'chip' + (r.services.includes(sv.id) ? ' on' : '')} onClick={() => toggleService(i, sv.id)}>{sv.name}</button>)}
+        </div>
+      </div>)}
+    </div>}
+    {uncovered.length > 0 && <div className="settings-warning">No active staff member offers {uncovered.map(s => s.name).join(', ')}, so {uncovered.length === 1 ? 'it has' : 'they have'} no available times.</div>}
+    {error && <div className="form-msg">{error}</div>}
+  </Section>
+}
+
+function ClientMessageSection({ practice, notify, onChanged }) {
+  const [note, setNote] = useState(practice.client_note || '')
+  const [cc, setCc] = useState(practice.default_country_code || '+1')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function save(e) {
+    e.preventDefault(); setError('')
+    const code = cc.trim().startsWith('+') ? cc.trim() : '+' + cc.trim()
+    if (!/^\+[0-9]{1,4}$/.test(code)) return setError('Country code should look like +1, +44 or +91.')
+    setBusy(true)
+    const { error } = await supabase.from('practices').update({ client_note: note.trim() || null, default_country_code: code }).eq('id', practice.id)
+    setBusy(false)
+    if (error) return setError(error.message)
+    setCc(code); notify('Client message settings saved'); onChanged()
+  }
+
+  return <Section icon={MessageSquareText} title="Messages to clients" text="Added to confirmation emails and WhatsApp reminders.">
+    <form className="settings-form" onSubmit={save}>
+      <Field label="Note for clients (optional)" hint={note.length + ' / 600 · e.g. "Cancellations made less than 6 hours before your appointment are not refunded."'}>
+        <textarea rows={3} maxLength={600} value={note} onChange={e => setNote(e.target.value)} placeholder="Your cancellation policy, parking info, what to bring…"/>
+      </Field>
+      <div className="form-grid">
+        <Field label="Default country code" hint="Used for WhatsApp when a client's phone number has no country code."><input value={cc} onChange={e => setCc(e.target.value)} placeholder="+1"/></Field>
+      </div>
+      {error && <div className="form-msg">{error}</div>}
+      <div className="settings-actions"><button className="primary" disabled={busy}><Save size={16}/>{busy ? 'Saving…' : 'Save messages'}</button></div>
+    </form>
   </Section>
 }

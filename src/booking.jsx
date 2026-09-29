@@ -17,6 +17,7 @@ export function AppointmentModal({ practiceId, practice, services, onClose, onSa
   const [form, setForm] = useState({ first_name: '', last_name: '', email: '', phone: '' })
   const [serviceId, setServiceId] = useState(services[0]?.id || '')
   const [date, setDate] = useState(todayIn(tz))
+  const [staffId, setStaffId] = useState('')
   const [avail, setAvail] = useState(null)
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState(null)
@@ -29,12 +30,14 @@ export function AppointmentModal({ practiceId, practice, services, onClose, onSa
   async function loadSlots() {
     if (!practiceId || !serviceId || !date) return
     setLoading(true); setSelected(null); setTaken(null)
-    const { data, error } = await supabase.rpc('get_practice_availability', { p_practice_id: practiceId, p_service_id: serviceId, p_date: date })
+    const { data, error } = await supabase.rpc('get_practice_availability', { p_practice_id: practiceId, p_service_id: serviceId, p_date: date, p_staff_id: staffId || null })
     setLoading(false)
     if (error) { setAvail(null); return setError(error.message) }
     setError(''); setAvail(data)
   }
-  useEffect(() => { loadSlots() }, [practiceId, serviceId, date])
+  useEffect(() => { loadSlots() }, [practiceId, serviceId, date, staffId])
+  // Reset the staff choice if the chosen person doesn't offer the newly chosen service.
+  useEffect(() => { if (staffId && avail?.staff && !avail.staff.some(x => x.id === staffId)) setStaffId('') }, [avail])
 
   const slots = avail?.slots || []
   const freeCount = slots.filter(s => s.available).length
@@ -54,7 +57,7 @@ export function AppointmentModal({ practiceId, practice, services, onClose, onSa
     const { error } = await supabase.rpc('create_appointment', {
       p_practice_id: practiceId, p_service_id: serviceId,
       p_first_name: form.first_name, p_last_name: form.last_name, p_email: form.email, p_phone: form.phone,
-      p_start_at: selected.start_at
+      p_start_at: selected.start_at, p_staff_id: staffId || null
     })
     setBusy(false)
     if (error) {
@@ -76,7 +79,7 @@ export function AppointmentModal({ practiceId, practice, services, onClose, onSa
     const { error } = await supabase.rpc('add_waitlist_entry', {
       p_practice_id: practiceId, p_service_id: serviceId,
       p_first_name: form.first_name, p_last_name: form.last_name, p_email: form.email, p_phone: form.phone,
-      p_window_start: windowStart, p_window_end: windowEnd, p_min_notice_minutes: 60
+      p_window_start: windowStart, p_window_end: windowEnd, p_min_notice_minutes: 60, p_staff_id: staffId || null
     })
     setBusy(false)
     if (error) return setError(error.message)
@@ -104,6 +107,14 @@ export function AppointmentModal({ practiceId, practice, services, onClose, onSa
         </Field>
       </div>
 
+      {(avail?.staff?.length || 0) > 1 && <div className="staff-picker">
+        <span>Staff</span>
+        <div className="chip-row">
+          <button type="button" className={'chip' + (!staffId ? ' on' : '')} onClick={() => setStaffId('')}>Any available</button>
+          {avail.staff.map(st => <button type="button" key={st.id} className={'chip' + (staffId === st.id ? ' on' : '')} onClick={() => setStaffId(st.id)}>{st.name}</button>)}
+        </div>
+      </div>}
+
       <div className="slot-panel">
         <div className="slot-panel-head">
           <strong>{longDate(date)}</strong>
@@ -116,14 +127,14 @@ export function AppointmentModal({ practiceId, practice, services, onClose, onSa
             {slots.map(s => <button type="button" key={s.start_at}
               className={'slot-btn' + (s.available ? '' : ' taken') + (selected?.start_at === s.start_at ? ' selected' : '') + (taken?.start_at === s.start_at ? ' flagged' : '')}
               onClick={() => { setError(''); if (s.available) { setSelected(s); setTaken(null) } else { setTaken(s); setSelected(null) } }}>
-              {timeLabel(s.start_at)}{!s.available && <small>Booked</small>}
+              {timeLabel(s.start_at)}{!s.available ? <small>Booked</small> : (!staffId && (avail?.staff?.length || 0) > 1) ? <small className="free">{s.free_count} free</small> : null}
             </button>)}
           </div>}
 
         {taken && <div className="waitlist-offer">
           <CalendarClock size={18}/>
           <div>
-            <strong>{timeLabel(taken.start_at)} is already booked.</strong>
+            <strong>{timeLabel(taken.start_at)} is already booked{staffId ? ' for ' + (avail?.staff?.find(x => x.id === staffId)?.name || 'this staff member') : ''}.</strong>
             <span>Add {form.first_name.trim() || 'this client'} to the waitlist. If this slot opens up, SlotRecover offers it to them automatically.</span>
             <div className="waitlist-actions">
               <button type="button" className="primary small" disabled={busy} onClick={() => addToWaitlist(taken.start_at, taken.end_at)}><ListPlus size={15}/>Waitlist for {timeLabel(taken.start_at)}</button>
