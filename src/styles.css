@@ -373,3 +373,8 @@
 .reset-card{width:min(460px,100%)}
 .reset-card label{font-size:12px;font-weight:700;margin:14px 0 7px}
 .icon-btn{color:#262930}
+
+/* Tap outside the open mobile menu to close it */
+.nav-backdrop{display:none}
+@media(max-width:760px){.nav-backdrop{display:block;position:fixed;inset:0;background:rgba(7,9,13,.45);z-index:45;animation:fadeIn .2s ease-out}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}

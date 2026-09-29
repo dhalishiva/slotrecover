@@ -582,6 +582,14 @@ function Dashboard({ session, demo, onExitDemo }) {
     if (!demo && session && supabase) loadLive()
   }, [demo, session])
 
+  // Close the mobile menu with Escape.
+  useEffect(() => {
+    if (!mobileNav) return
+    const onKey = e => { if (e.key === 'Escape') setMobileNav(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mobileNav])
+
   // Notifications open /?remind=<appointment id> to jump straight to the WhatsApp reminder.
   useEffect(() => {
     if (demo || !loaded || !practice) return
@@ -709,6 +717,7 @@ function Dashboard({ session, demo, onExitDemo }) {
   ]
 
   return <div className="app-shell">
+    {mobileNav && <div className="nav-backdrop" onClick={() => setMobileNav(false)} aria-hidden="true"/>}
     <aside className={'sidebar ' + (mobileNav ? 'open' : '')}>
       <Brand />
       <button className="close-nav" onClick={() => setMobileNav(false)}><X size={20}/></button>
