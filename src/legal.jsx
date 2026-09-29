@@ -287,7 +287,8 @@ function Refunds() {
       <p>Subscriptions renew automatically at the end of each billing period at the price shown at sign-up, until you cancel. We will email you before any price change takes effect.</p>
     </S>
     <S h="How to cancel">
-      <p>Email <Mail to={site.billingEmail}/> from your account email with the subject "Cancel subscription". We confirm cancellations in writing within one business day. You can also cancel the mandate from your bank or card provider. Cancellation takes effect at the end of your current billing period, and you keep access until then.</p>
+      <p>Cancel online at any time in <strong>Settings → Subscription → Cancel subscription</strong>. If you cancel during your free trial, you are not charged and keep access until the trial ends. If you cancel during a paid period, renewal stops and you keep access until the end of that period.</p>
+      <p>You can also email <Mail to={site.billingEmail}/> from your account email with the subject "Cancel subscription"; we confirm within one business day.</p>
     </S>
     <S h="Refunds">
       <ul>

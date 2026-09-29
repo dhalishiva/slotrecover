@@ -1,0 +1,226 @@
+import React, { useEffect, useMemo, useState } from 'react'
+import { Building2, Clock3, CreditCard, Plus, Save, Scissors } from 'lucide-react'
+import { supabase } from './supabase'
+import { Field, Modal, money } from './ui'
+import { accessUntil, cancelSubscription, fetchBillingStatus, startCheckout } from './billingClient'
+
+const DAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']]
+const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF', 'SEK', 'NOK', 'DKK', 'PLN', 'INR']
+const FALLBACK_TZ = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Phoenix', 'America/Anchorage', 'Pacific/Honolulu', 'America/Toronto', 'Europe/London', 'Europe/Dublin', 'Europe/Lisbon', 'Europe/Paris', 'Europe/Berlin', 'Europe/Madrid', 'Europe/Rome', 'Europe/Amsterdam', 'Europe/Brussels', 'Europe/Zurich', 'Europe/Stockholm', 'Europe/Warsaw', 'Europe/Athens', 'Europe/Helsinki', 'Asia/Kolkata', 'Australia/Sydney']
+const timezones = (() => { try { return Intl.supportedValuesOf('timeZone') } catch { return FALLBACK_TZ } })()
+const hhmm = t => (t || '').slice(0, 5)
+const fmtDate = d => d ? new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
+
+export function SettingsPage({ practice, demo, notify, onChanged }) {
+  if (demo) {
+    return <div className="page"><div className="page-heading"><div><div className="eyebrow-dark">WORKSPACE</div><h1>Settings</h1><p>Settings are available in your live workspace. Sign up to configure hours, services and billing.</p></div></div></div>
+  }
+  if (!practice) return <div className="page"><div className="empty-inline"><div className="spinner"/></div></div>
+  return <div className="page settings-page">
+    <div className="page-heading"><div><div className="eyebrow-dark">WORKSPACE</div><h1>Settings</h1><p>Business details, opening hours, services and your subscription.</p></div></div>
+    <BusinessSection practice={practice} notify={notify} onChanged={onChanged}/>
+    <HoursSection practice={practice} notify={notify} onChanged={onChanged}/>
+    <ServicesSection practice={practice} notify={notify} onChanged={onChanged}/>
+    <BillingSection notify={notify}/>
+  </div>
+}
+
+function Section({ icon: Icon, title, text, children, action }) {
+  return <section className="panel settings-section">
+    <div className="settings-head">
+      <div className="settings-icon"><Icon size={18}/></div>
+      <div><h2>{title}</h2><p>{text}</p></div>
+      {action}
+    </div>
+    <div className="settings-body">{children}</div>
+  </section>
+}
+
+function BusinessSection({ practice, notify, onChanged }) {
+  const [form, setForm] = useState({ name: practice.name || '', contact_email: practice.contact_email || '', timezone: practice.timezone || 'America/New_York', currency: practice.currency || 'USD' })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const tzList = useMemo(() => timezones.includes(form.timezone) ? timezones : [form.timezone, ...timezones], [form.timezone])
+
+  async function save(e) {
+    e.preventDefault(); setBusy(true); setError('')
+    const { error } = await supabase.from('practices').update({
+      name: form.name.trim(), contact_email: form.contact_email.trim() || null, timezone: form.timezone, currency: form.currency
+    }).eq('id', practice.id)
+    setBusy(false)
+    if (error) return setError(error.message)
+    notify('Business details saved'); onChanged()
+  }
+
+  return <Section icon={Building2} title="Business details" text="Shown to your clients in emails. Timezone controls every appointment time and available slot.">
+    <form className="settings-form" onSubmit={save}>
+      <div className="form-grid">
+        <Field label="Business name"><input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/></Field>
+        <Field label="Contact email"><input type="email" value={form.contact_email} onChange={e => setForm({ ...form, contact_email: e.target.value })} placeholder="hello@yourbusiness.com"/></Field>
+      </div>
+      <div className="form-grid">
+        <Field label="Timezone"><select value={form.timezone} onChange={e => setForm({ ...form, timezone: e.target.value })}>{tzList.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}</select></Field>
+        <Field label="Currency" hint="Used for service prices and revenue metrics."><select value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value })}>{CURRENCIES.map(c => <option key={c}>{c}</option>)}</select></Field>
+      </div>
+      {error && <div className="form-msg">{error}</div>}
+      <div className="settings-actions"><button className="primary" disabled={busy}><Save size={16}/>{busy ? 'Saving…' : 'Save details'}</button></div>
+    </form>
+  </Section>
+}
+
+function HoursSection({ practice, notify, onChanged }) {
+  const [form, setForm] = useState({
+    open_time: hhmm(practice.open_time) || '09:00', close_time: hhmm(practice.close_time) || '18:00',
+    working_days: practice.working_days || [1, 2, 3, 4, 5], slot_interval_minutes: practice.slot_interval_minutes || 30
+  })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  function toggleDay(d) {
+    const days = form.working_days.includes(d) ? form.working_days.filter(x => x !== d) : [...form.working_days, d].sort()
+    setForm({ ...form, working_days: days })
+  }
+
+  async function save(e) {
+    e.preventDefault(); setError('')
+    if (form.close_time <= form.open_time) return setError('Closing time must be after opening time.')
+    if (!form.working_days.length) return setError('Choose at least one working day.')
+    setBusy(true)
+    const { error } = await supabase.from('practices').update({
+      open_time: form.open_time, close_time: form.close_time, working_days: form.working_days, slot_interval_minutes: Number(form.slot_interval_minutes)
+    }).eq('id', practice.id)
+    setBusy(false)
+    if (error) return setError(error.message)
+    notify('Opening hours saved'); onChanged()
+  }
+
+  return <Section icon={Clock3} title="Opening hours" text={`Available times in New appointment and the client reschedule page follow these hours (${practice.timezone}).`}>
+    <form className="settings-form" onSubmit={save}>
+      <div className="day-toggle">{DAYS.map(([d, label]) => <button type="button" key={d} className={form.working_days.includes(d) ? 'on' : ''} onClick={() => toggleDay(d)}>{label}</button>)}</div>
+      <div className="form-grid three">
+        <Field label="Opens"><input type="time" value={form.open_time} onChange={e => setForm({ ...form, open_time: e.target.value })}/></Field>
+        <Field label="Closes"><input type="time" value={form.close_time} onChange={e => setForm({ ...form, close_time: e.target.value })}/></Field>
+        <Field label="Slot spacing"><select value={form.slot_interval_minutes} onChange={e => setForm({ ...form, slot_interval_minutes: e.target.value })}><option value={15}>Every 15 min</option><option value={30}>Every 30 min</option><option value={60}>Every hour</option></select></Field>
+      </div>
+      {error && <div className="form-msg">{error}</div>}
+      <div className="settings-actions"><button className="primary" disabled={busy}><Save size={16}/>{busy ? 'Saving…' : 'Save hours'}</button></div>
+    </form>
+  </Section>
+}
+
+function ServicesSection({ practice, notify, onChanged }) {
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState('')
+
+  async function load() {
+    const { data, error } = await supabase.from('services').select('id,name,duration_minutes,price_cents,active').eq('practice_id', practice.id).order('created_at')
+    if (error) return setError(error.message)
+    setRows((data || []).map(s => ({ ...s, price: String((s.price_cents || 0) / 100), dirty: false })))
+  }
+  useEffect(() => { load() }, [practice.id])
+
+  function edit(i, patch) { setRows(rows.map((r, j) => j === i ? { ...r, ...patch, dirty: true } : r)) }
+  function addRow() { setRows([...(rows || []), { id: null, name: '', duration_minutes: 60, price: '', active: true, dirty: true }]) }
+
+  async function saveRow(i) {
+    const r = rows[i]; setError('')
+    if (!r.name.trim()) return setError('Service name is required.')
+    const payload = { name: r.name.trim(), duration_minutes: Math.max(5, Number(r.duration_minutes) || 60), price_cents: Math.max(0, Math.round(Number(r.price || 0) * 100)), active: r.active }
+    const { error } = r.id
+      ? await supabase.from('services').update(payload).eq('id', r.id)
+      : await supabase.from('services').insert({ ...payload, practice_id: practice.id })
+    if (error) return setError(error.message)
+    notify(r.id ? 'Service updated' : 'Service added'); load(); onChanged()
+  }
+
+  const activeCount = (rows || []).filter(r => r.active && r.id).length
+
+  return <Section icon={Scissors} title="Services" text="Length sets how long each appointment blocks your calendar. Price feeds revenue at risk and recovered." action={<button type="button" className="ghost" onClick={addRow}><Plus size={16}/>Add service</button>}>
+    {!rows ? <div className="spinner"/> : <div className="service-table">
+      <div className="service-row head"><span>Service</span><span>Length (min)</span><span>Price ({practice.currency})</span><span>Active</span><span/></div>
+      {rows.map((r, i) => <div className="service-row" key={r.id || 'new' + i}>
+        <input aria-label="Service name" value={r.name} placeholder="e.g. Haircut" onChange={e => edit(i, { name: e.target.value })}/>
+        <input aria-label="Length in minutes" type="number" min="5" step="5" value={r.duration_minutes} onChange={e => edit(i, { duration_minutes: e.target.value })}/>
+        <input aria-label="Price" type="number" min="0" step="0.01" value={r.price} placeholder="0" onChange={e => edit(i, { price: e.target.value })}/>
+        <label className="switch"><input type="checkbox" checked={r.active} disabled={r.active && activeCount <= 1 && r.id} onChange={e => edit(i, { active: e.target.checked })}/><i/></label>
+        <button type="button" className="ghost small" disabled={!r.dirty} onClick={() => saveRow(i)}>{r.id ? 'Save' : 'Add'}</button>
+      </div>)}
+    </div>}
+    {error && <div className="form-msg">{error}</div>}
+  </Section>
+}
+
+function BillingSection({ notify }) {
+  const [billing, setBilling] = useState(null)
+  const [error, setError] = useState('')
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  async function load() {
+    try { setBilling(await fetchBillingStatus()) } catch (e) { setError(e.message) }
+  }
+  useEffect(() => { load() }, [])
+
+  async function doCancel() {
+    setBusy(true); setError('')
+    try {
+      const res = await cancelSubscription()
+      setConfirming(false)
+      notify(res.immediate ? 'Subscription cancelled. You will not be charged.' : 'Renewal cancelled.')
+      await load()
+    } catch (e) { setError(e.message) }
+    setBusy(false)
+  }
+
+  async function restart() {
+    setBusy(true); setError('')
+    const res = await startCheckout()
+    setBusy(false)
+    if (res.ok) { notify('Subscription restarted'); window.location.reload() }
+    else if (!res.dismissed) setError(res.message)
+  }
+
+  if (!billing) return <Section icon={CreditCard} title="Subscription" text="Your SlotRecover plan and billing.">{error ? <div className="form-msg">{error}</div> : <div className="spinner"/>}</Section>
+
+  const plan = Array.isArray(billing.billing_plans) ? billing.billing_plans[0] : billing.billing_plans
+  const price = plan ? money(plan.amount_paise / 100, plan.currency) + ' / ' + (plan.period === 'yearly' ? 'year' : 'month') : '—'
+  const inTrial = new Date(billing.trial_ends_at).getTime() > Date.now()
+  const until = accessUntil(billing)
+  const cancelled = billing.status === 'cancelled'
+  const endingSoon = billing.cancel_at_period_end && !cancelled
+  const canCancel = billing.razorpay_subscription_id && ['authenticated', 'active', 'authorization_pending', 'past_due'].includes(billing.status) && !endingSoon
+
+  const statusLabel = cancelled ? 'Cancelled' : endingSoon ? 'Cancels at period end' : inTrial ? 'Free trial' : billing.status === 'active' ? 'Active' : billing.status === 'past_due' ? 'Payment failed' : billing.status.replace(/_/g, ' ')
+  const statusTone = cancelled || billing.status === 'past_due' ? 'danger' : endingSoon ? 'wait' : 'ok'
+
+  return <Section icon={CreditCard} title="Subscription" text="Billed by Dhali Services through Razorpay.">
+    <div className="billing-grid">
+      <div><span>Plan</span><strong>{plan?.name || '—'}</strong><small>{price}</small></div>
+      <div><span>Status</span><strong><span className={'status ' + statusTone}>{statusLabel}</span></strong></div>
+      {cancelled || endingSoon
+        ? <div><span>Access until</span><strong>{fmtDate(until)}</strong><small>No further charges</small></div>
+        : inTrial
+          ? <div><span>Trial ends</span><strong>{fmtDate(billing.trial_ends_at)}</strong><small>First charge on this date</small></div>
+          : <div><span>Next billing date</span><strong>{fmtDate(billing.current_period_end)}</strong></div>}
+    </div>
+    {error && <div className="form-msg">{error}</div>}
+    <div className="settings-actions split">
+      <a className="text-link" href="/refunds" target="_blank" rel="noreferrer">Refund & Cancellation Policy</a>
+      {canCancel && <button type="button" className="danger-btn" onClick={() => setConfirming(true)}>Cancel subscription</button>}
+      {cancelled && <button type="button" className="primary" disabled={busy} onClick={restart}>{busy ? 'Opening Razorpay…' : 'Restart subscription'}</button>}
+      {endingSoon && <span className="settings-note">Changed your mind? Email billing support to keep your plan.</span>}
+    </div>
+
+    {confirming && <Modal title="Cancel your subscription?" subtitle={inTrial ? 'You are still in your free trial.' : 'Your plan will stop renewing.'} onClose={() => !busy && setConfirming(false)}>
+      <div className="modal-form">
+        <p className="confirm-text">{inTrial
+          ? <>You won't be charged. You keep access until your trial ends on <strong>{fmtDate(billing.trial_ends_at)}</strong>, and then your workspace is locked until you restart.</>
+          : <>You won't be charged again. You keep access until <strong>{fmtDate(billing.current_period_end)}</strong>. Your data is kept for 30 days after that so you can export it or restart.</>}</p>
+        <div className="modal-actions">
+          <button type="button" className="ghost" disabled={busy} onClick={() => setConfirming(false)}>Keep subscription</button>
+          <button type="button" className="danger-btn solid" disabled={busy} onClick={doCancel}>{busy ? 'Cancelling…' : 'Yes, cancel'}</button>
+        </div>
+      </div>
+    </Modal>}
+  </Section>
+}

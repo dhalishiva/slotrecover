@@ -140,18 +140,25 @@ Deno.serve(async (req) => {
           .eq("id", billing.plan_id);
       }
 
-      let subscriptionId = billing.razorpay_subscription_id;
+      // A cancelled/expired/halted subscription cannot be reused; start a new one.
+      const restarting = ["cancelled", "expired", "halted"].includes(billing.status);
+      let subscriptionId = restarting ? null : billing.razorpay_subscription_id;
+      const trialEndMs = new Date(billing.trial_ends_at).getTime();
+      const trialRemaining = trialEndMs > Date.now() + 10 * 60 * 1000;
 
       if (!subscriptionId) {
-        const startAt = Math.floor(new Date(billing.trial_ends_at).getTime() / 1000);
+        const payload: Record<string, unknown> = {
+          plan_id: razorpayPlanId,
+          total_count: billing.billing_plans.period === "yearly" ? 10 : 120,
+          quantity: 1,
+          customer_notify: 0,
+        };
+        // Only defer the first charge while trial time remains; otherwise bill now.
+        if (trialRemaining) payload.start_at = Math.floor(trialEndMs / 1000);
         const subscription = await razorpayFetch("/v1/subscriptions", keyId, keySecret, {
           method: "POST",
           body: JSON.stringify({
-            plan_id: razorpayPlanId,
-            total_count: billing.billing_plans.period === "yearly" ? 10 : 120,
-            quantity: 1,
-            customer_notify: 0,
-            start_at: startAt,
+            ...payload,
             notes: {
               slotrecover_user_id: user.id,
               slotrecover_plan_code: billing.billing_plans.code,
@@ -165,6 +172,7 @@ Deno.serve(async (req) => {
           .update({
             razorpay_subscription_id: subscriptionId,
             status: "authorization_pending",
+            cancel_at_period_end: false,
             updated_at: new Date().toISOString(),
           })
           .eq("user_id", user.id);
@@ -175,7 +183,7 @@ Deno.serve(async (req) => {
         key_id: keyId,
         subscription_id: subscriptionId,
         name: "Dhali Services",
-        description: billing.billing_plans.name + " · 7-day free trial",
+        description: billing.billing_plans.name + (trialRemaining ? " · free trial" : ""),
         amount_paise: billing.billing_plans.amount_paise,
         currency: billing.billing_plans.currency,
         trial_ends_at: billing.trial_ends_at,
@@ -223,6 +231,55 @@ Deno.serve(async (req) => {
       });
 
       return respond({ ok: true, status: "authenticated" });
+    }
+
+    if (action === "cancel_subscription") {
+      const subscriptionId = billing.razorpay_subscription_id;
+      if (!subscriptionId || ["cancelled", "expired"].includes(billing.status)) {
+        return respond({ error: "no_active_subscription", message: "There is no active subscription to cancel." }, 400);
+      }
+
+      const current = await razorpayFetch("/v1/subscriptions/" + subscriptionId, keyId, keySecret, { method: "GET" });
+      const rzStatus = String(current?.status || "");
+      const now = new Date().toISOString();
+      let updates: Record<string, unknown>;
+      let accessUntil: string | null;
+
+      if (["created", "authenticated"].includes(rzStatus)) {
+        // Still in trial: nothing has been charged, so cancel immediately.
+        await razorpayFetch("/v1/subscriptions/" + subscriptionId + "/cancel", keyId, keySecret, {
+          method: "POST",
+          body: JSON.stringify({ cancel_at_cycle_end: 0 }),
+        });
+        accessUntil = billing.trial_ends_at;
+        updates = { status: "cancelled", cancel_at_period_end: false };
+      } else if (["active", "pending"].includes(rzStatus)) {
+        // Paid period in progress: stop renewal, keep access until the period ends.
+        await razorpayFetch("/v1/subscriptions/" + subscriptionId + "/cancel", keyId, keySecret, {
+          method: "POST",
+          body: JSON.stringify({ cancel_at_cycle_end: 1 }),
+        });
+        const periodEnd = current?.current_end ? new Date(current.current_end * 1000).toISOString() : billing.current_period_end;
+        accessUntil = periodEnd;
+        updates = { cancel_at_period_end: true, current_period_end: periodEnd };
+      } else {
+        accessUntil = billing.current_period_end || billing.trial_ends_at;
+        updates = { status: "cancelled", cancel_at_period_end: false };
+      }
+
+      await admin
+        .from("billing_accounts")
+        .update({ ...updates, last_event: "app.cancel_requested", last_event_at: now, updated_at: now })
+        .eq("user_id", user.id);
+
+      await admin.from("billing_events").insert({
+        user_id: user.id,
+        razorpay_subscription_id: subscriptionId,
+        event_type: "app.cancel_requested",
+        payload: { razorpay_status_before: rzStatus, access_until: accessUntil },
+      });
+
+      return respond({ ok: true, access_until: accessUntil, immediate: updates.status === "cancelled" });
     }
 
     return respond({ error: "unsupported_action" }, 400);

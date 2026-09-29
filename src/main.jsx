@@ -9,6 +9,10 @@ import {
 import { supabase, supabaseConfigured } from './supabase'
 import { LegalPage, isLegalPath } from './legal'
 import { HelpCenter, HelpBubble } from './help'
+import { money, setMoneyCurrency } from './ui'
+import { hasAccess, startCheckout, fetchBillingStatus, accessUntil } from './billingClient'
+import { SettingsPage } from './settings'
+import { AppointmentModal } from './booking'
 import '@fontsource/dm-sans/400.css'
 import '@fontsource/dm-sans/500.css'
 import '@fontsource/dm-sans/600.css'
@@ -31,10 +35,6 @@ const demoActivity = [
   { title: 'Mia Thompson flagged high risk', meta: 'No confirmation after 24h reminder', value: '$240 at risk', icon: 'risk' },
   { title: 'Sophia Chen reminder delivered', meta: 'Email confirmation requested', value: '11:00 AM', icon: 'message' },
 ]
-
-const money = (v) => new Intl.NumberFormat('en-US', {
-  style: 'currency', currency: 'USD', maximumFractionDigits: 0
-}).format(v || 0)
 
 function App() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
@@ -70,7 +70,7 @@ function AppContent() {
     }
     setBillingLoading(true)
     supabase.from('billing_accounts')
-      .select('status,trial_started_at,trial_ends_at,razorpay_subscription_id,authorization_verified_at,billing_plans(name,amount_paise,currency,period,trial_days)')
+      .select('status,trial_started_at,trial_ends_at,current_period_end,cancel_at_period_end,razorpay_subscription_id,authorization_verified_at,billing_plans(name,amount_paise,currency,period,trial_days)')
       .eq('user_id', session.user.id)
       .single()
       .then(({ data }) => {
@@ -89,7 +89,7 @@ function AppContent() {
 
   if (loading || (session && !demo && billingLoading)) return <div className="boot"><div className="spinner" />Loading workspace…</div>
   if (!session && !demo) return <AuthScreen onDemo={() => setDemo(true)} />
-  if (session && !demo && billing && !['authenticated','active'].includes(billing.status)) {
+  if (session && !demo && billing && !hasAccess(billing)) {
     return <BillingSetupScreen billing={billing} onReady={() => window.location.reload()} />
   }
   return <Dashboard session={session} demo={demo} onExitDemo={() => setDemo(false)} />
@@ -99,70 +99,12 @@ function BillingSetupScreen({ billing, onReady }) {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
 
-  async function loadRazorpay() {
-    if (window.Razorpay) return true
-    return await new Promise(resolve => {
-      const script = document.createElement('script')
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-      script.onload = () => resolve(true)
-      script.onerror = () => resolve(false)
-      document.body.appendChild(script)
-    })
-  }
-
   async function startBilling() {
     setBusy(true); setMessage('')
-    const { data, error } = await supabase.functions.invoke('slotrecover-billing', {
-      body: { action: 'create_subscription' }
-    })
-    if (error || data?.error) {
-      let detail = data?.message || data?.error || error?.message || 'Unable to start Razorpay.'
-      try {
-        if (error?.context?.json) {
-          const body = await error.context.json()
-          detail = body?.message || body?.error || detail
-        }
-      } catch {}
-      setBusy(false)
-      setMessage(detail)
-      return
-    }
-
-    const loaded = await loadRazorpay()
-    if (!loaded) {
-      setBusy(false)
-      setMessage('Unable to load Razorpay Checkout.')
-      return
-    }
-
-    const checkout = new window.Razorpay({
-      key: data.key_id,
-      subscription_id: data.subscription_id,
-      name: 'Dhali Services',
-      description: data.description,
-      prefill: data.prefill,
-      theme: { color: '#17191e' },
-      handler: async response => {
-        const { data: verified, error: verifyError } = await supabase.functions.invoke('slotrecover-billing', {
-          body: {
-            action: 'verify_checkout',
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_subscription_id: response.razorpay_subscription_id,
-            razorpay_signature: response.razorpay_signature
-          }
-        })
-        if (verifyError || verified?.error) {
-          setBusy(false)
-          setMessage(verified?.message || verifyError?.message || 'Authorization could not be verified.')
-          return
-        }
-        setBusy(false)
-        onReady()
-      },
-      modal: { ondismiss: () => setBusy(false) }
-    })
-
-    checkout.open()
+    const res = await startCheckout()
+    setBusy(false)
+    if (res.ok) onReady()
+    else if (!res.dismissed) setMessage(res.message)
   }
 
   const trialEnd = new Date(billing.trial_ends_at)
@@ -183,23 +125,36 @@ function BillingSetupScreen({ billing, onReady }) {
     maximumFractionDigits: 0
   }).format(0)
 
+  const trialLeft = trialEnd.getTime() > Date.now()
+  const periodWord = plan?.period === 'yearly' ? 'year' : 'month'
+  const legal = <>By continuing you agree to the <a href="/terms" target="_blank" rel="noreferrer">Terms of Service</a> and <a href="/refunds" target="_blank" rel="noreferrer">Refund &amp; Cancellation Policy</a>.</>
+
   return <div className="billing-setup-shell">
     <div className="billing-setup-card">
       <Brand />
-      <div className="billing-pill">7-DAY FREE TRIAL</div>
-      <h1>Start your SlotRecover trial.</h1>
-      <p>Authorize Razorpay now. Your subscription billing is scheduled to begin after the 7-day trial ends.</p>
+      {trialLeft ? <>
+        <div className="billing-pill">{(plan?.trial_days || 7)}-DAY FREE TRIAL</div>
+        <h1>Start your SlotRecover trial.</h1>
+        <p>Authorize Razorpay now. Your subscription billing is scheduled to begin after the free trial ends.</p>
+      </> : <>
+        <div className="billing-pill">{billing.status === 'cancelled' ? 'SUBSCRIPTION CANCELLED' : 'TRIAL ENDED'}</div>
+        <h1>Restart your SlotRecover subscription.</h1>
+        <p>Your workspace and data are still here. Restart your plan to keep confirming appointments and recovering cancelled slots.</p>
+      </>}
       <div className="billing-summary">
-        <div><span>Trial period</span><strong>{daysLeft || 7} days</strong></div>
-        <div><span>Test plan</span><strong>{formattedAmount} / {plan?.period || 'month'}</strong></div>
-        <div><span>Charge today</span><strong>{formattedZero}*</strong></div>
+        {trialLeft && <div><span>Trial remaining</span><strong>{daysLeft} day{daysLeft === 1 ? '' : 's'}</strong></div>}
+        <div><span>Plan</span><strong>{formattedAmount} / {periodWord}</strong></div>
+        <div><span>Charge today</span><strong>{trialLeft ? formattedZero + '*' : formattedAmount}</strong></div>
       </div>
       <button className="primary wide" onClick={startBilling} disabled={busy}>
-        {busy ? 'Opening Razorpay…' : 'Authorize & start trial'}
+        {busy ? 'Opening Razorpay…' : trialLeft ? 'Authorize & start trial' : 'Restart subscription'}
       </button>
-      <small>*Razorpay may perform a small mandate/authentication transaction depending on the payment method.</small>
-      <small className="renewal-note">Your subscription starts automatically when the {plan?.trial_days || 7}-day trial ends and renews every {plan?.period === 'yearly' ? 'year' : 'month'} at {formattedAmount} plus applicable taxes until you cancel. Cancel any time before the trial ends and you won't be charged. By continuing you agree to the <a href="/terms" target="_blank" rel="noreferrer">Terms of Service</a> and <a href="/refunds" target="_blank" rel="noreferrer">Refund &amp; Cancellation Policy</a>.</small>
+      {trialLeft && <small>*Razorpay may perform a small mandate/authentication transaction depending on the payment method.</small>}
+      <small className="renewal-note">{trialLeft
+        ? <>Your subscription starts automatically when the trial ends and renews every {periodWord} at {formattedAmount} plus applicable taxes until you cancel. Cancel any time before the trial ends and you won't be charged. </>
+        : <>You'll be charged {formattedAmount} today and every {periodWord} after that, plus applicable taxes, until you cancel in Settings. </>}{legal}</small>
       {message && <div className="form-msg">{message}</div>}
+      <button type="button" className="text-btn signout-link" onClick={() => supabase.auth.signOut()}>Sign out</button>
     </div>
   </div>
 }
@@ -495,6 +450,7 @@ function Dashboard({ session, demo, onExitDemo }) {
   const [mobileNav, setMobileNav] = useState(false)
   const [practiceName, setPracticeName] = useState('Atelier No. 7')
   const [practiceId, setPracticeId] = useState(null)
+  const [practice, setPractice] = useState(null)
   const [services, setServices] = useState([])
   const [busy, setBusy] = useState(false)
   const [needsSetup, setNeedsSetup] = useState(false)
@@ -533,6 +489,7 @@ function Dashboard({ session, demo, onExitDemo }) {
       setData({ appointments: [], revenue: 0, atRisk: 0, recoveryRate: 0, noShow: 0, recoveredSlots: 0, cancelledSlots: 0, activity: [], waitlist: [] })
       setPracticeName('Your practice')
       setPracticeId(null)
+      setPractice(null)
       setServices([])
       setNeedsSetup(true)
       setBusy(false)
@@ -540,6 +497,8 @@ function Dashboard({ session, demo, onExitDemo }) {
     }
 
     const p = practices[0]
+    setMoneyCurrency(p.currency)
+    setPractice(p)
     setPracticeName(p.name)
     setPracticeId(p.id)
     setNeedsSetup(false)
@@ -563,8 +522,8 @@ function Dashboard({ session, demo, onExitDemo }) {
 
     const appointments = (appts || []).map(a => ({
       id: a.id,
-      time: new Date(a.start_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-      date: new Date(a.start_at).toLocaleDateString([], { month:'short', day:'numeric' }),
+      time: new Date(a.start_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: p.timezone }),
+      date: new Date(a.start_at).toLocaleDateString([], { month:'short', day:'numeric', timeZone: p.timezone }),
       client: [a.clients?.first_name || 'Client', a.clients?.last_name || ''].join(' ').trim(),
       service: a.services?.name || 'Service',
       value: (a.services?.price_cents || 0) / 100,
@@ -608,7 +567,7 @@ function Dashboard({ session, demo, onExitDemo }) {
         client:[w.clients?.first_name||'Client',w.clients?.last_name||''].join(' ').trim(),
         service:w.services?.name||'Service',
         status:w.status,
-        window:new Date(w.window_start).toLocaleDateString([], {month:'short',day:'numeric'}) + ' – ' + new Date(w.window_end).toLocaleDateString([], {month:'short',day:'numeric'}),
+        window:formatWindow(w.window_start, w.window_end, p.timezone),
         value:(w.services?.price_cents||0)/100
       }))
     })
@@ -641,7 +600,7 @@ function Dashboard({ session, demo, onExitDemo }) {
       </nav>
       <div className="sidebar-bottom">
         <button onClick={() => { window.location.href = '/help' }}><HelpCircle size={18}/>Help Center</button>
-        <button className={nav === 'Settings' ? 'active' : ''} onClick={() => setNav('Settings')}><Settings size={18}/>Settings</button>
+        <button className={nav === 'Settings' ? 'active' : ''} onClick={() => { setNav('Settings'); setMobileNav(false) }}><Settings size={18}/>Settings</button>
         <button onClick={signOut}><LogOut size={18}/>{demo ? 'Exit demo' : 'Sign out'}</button>
       </div>
     </aside>
@@ -659,127 +618,55 @@ function Dashboard({ session, demo, onExitDemo }) {
         </div>
       </header>
 
-      {!demo && <BillingBanner session={session} />}
+      {!demo && <BillingBanner session={session} onOpenSettings={() => setNav('Settings')} />}
       {needsSetup && !demo ? <Onboarding session={session} onDone={loadLive}/> :
         nav === 'Overview' ? <Overview data={data} busy={busy} refresh={loadLive} demo={demo} onNew={() => setModal('appointment')}/> :
         nav === 'Appointments' ? <Appointments appointments={data.appointments} onNew={() => setModal('appointment')}/> :
-        nav === 'Recovery' ? <Recovery waitlist={data.waitlist} onNew={() => setModal('waitlist')}/> :
+        nav === 'Recovery' ? <Recovery waitlist={data.waitlist} onNew={() => setModal('appointment')}/> :
         nav === 'Clients' ? <EmptyPanel title="Client intelligence" text="Client history, confirmation behavior, and waitlist preferences will live here." icon={UsersRound}/> :
         nav === 'Messaging' ? <EmptyPanel title="Messaging center" text="Track confirmation reminders, delivery states, replies, and channel costs." icon={MessageCircleMore}/> :
-        <EmptyPanel title="Workspace settings" text="Business hours, service rules, reminder timing, deposits, and integrations." icon={Settings}/>
+        <SettingsPage practice={practice} demo={demo} notify={notify} onChanged={loadLive}/>
       }
     </main>
 
-    {modal === 'appointment' && <AppointmentModal practiceId={practiceId} services={services} onClose={() => setModal(null)} onSaved={() => { setModal(null); notify('Appointment created'); loadLive() }}/>}
-    {modal === 'waitlist' && <WaitlistModal practiceId={practiceId} services={services} onClose={() => setModal(null)} onSaved={() => { setModal(null); notify('Waitlist entry added'); loadLive() }}/>}
+    {modal === 'appointment' && (demo
+      ? <DemoNotice onClose={() => setModal(null)}/>
+      : <AppointmentModal practiceId={practiceId} practice={practice} services={services} onClose={() => setModal(null)} onSaved={kind => { setModal(null); notify(kind === 'waitlist' ? 'Added to the waitlist' : 'Appointment created'); loadLive() }}/>)}
     {toast && <div className="toast">{toast}</div>}
   </div>
 }
 
-function BillingBanner({ session }) {
+function BillingBanner({ session, onOpenSettings }) {
   const [billing, setBilling] = useState(null)
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
 
-  useEffect(() => { loadBilling() }, [session?.user?.id])
-
-  async function loadBilling() {
+  useEffect(() => {
     if (!session || !supabase) return
-    const { data, error } = await supabase.functions.invoke('slotrecover-billing', {
-      body: { action: 'status' }
-    })
-    if (!error && data?.billing) setBilling(data.billing)
-  }
-
-  async function loadRazorpay() {
-    if (window.Razorpay) return true
-    return await new Promise(resolve => {
-      const script = document.createElement('script')
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-      script.onload = () => resolve(true)
-      script.onerror = () => resolve(false)
-      document.body.appendChild(script)
-    })
-  }
-
-  async function startBilling() {
-    setBusy(true); setMessage('')
-    const { data, error } = await supabase.functions.invoke('slotrecover-billing', {
-      body: { action: 'create_subscription' }
-    })
-    if (error || data?.error) {
-      setBusy(false)
-      setMessage(data?.message || error?.message || 'Unable to start billing setup.')
-      return
-    }
-
-    const loaded = await loadRazorpay()
-    if (!loaded) {
-      setBusy(false)
-      setMessage('Unable to load Razorpay Checkout.')
-      return
-    }
-
-    const checkout = new window.Razorpay({
-      key: data.key_id,
-      subscription_id: data.subscription_id,
-      name: data.name,
-      description: data.description,
-      prefill: data.prefill,
-      theme: { color: '#17191e' },
-      handler: async response => {
-        const { data: verified, error: verifyError } = await supabase.functions.invoke('slotrecover-billing', {
-          body: {
-            action: 'verify_checkout',
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_subscription_id: response.razorpay_subscription_id,
-            razorpay_signature: response.razorpay_signature
-          }
-        })
-        if (verifyError || verified?.error) {
-          setMessage(verified?.message || verifyError?.message || 'Billing authorization could not be verified.')
-          setBusy(false)
-          return
-        }
-        setMessage('Payment method authorized. Your 7-day trial remains active.')
-        setBusy(false)
-        loadBilling()
-      },
-      modal: {
-        ondismiss: () => setBusy(false)
-      }
-    })
-    checkout.open()
-  }
+    fetchBillingStatus().then(setBilling).catch(() => {})
+  }, [session?.user?.id])
 
   if (!billing) return null
+  const until = accessUntil(billing)
+  const fmt = d => d ? new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric' }) : ''
+  const trialMs = new Date(billing.trial_ends_at).getTime() - Date.now()
+  const daysLeft = Math.max(0, Math.ceil(trialMs / 86400000))
 
-  const trialEnd = new Date(billing.trial_ends_at)
-  const msLeft = trialEnd.getTime() - Date.now()
-  const daysLeft = Math.max(0, Math.ceil(msLeft / 86400000))
-  const active = billing.status === 'active'
-  const authorized = ['authenticated','authorization_pending'].includes(billing.status)
-  const expired = msLeft <= 0 && !active
-
-  if (expired) {
-    return <div className="billing-gate">
-      <div className="billing-gate-card">
-        <div className="billing-pill">TRIAL ENDED</div>
-        <h2>Your 7-day trial has ended.</h2>
-        <p>Authorize your Razorpay subscription to continue using SlotRecover.</p>
-        <button className="primary" onClick={startBilling} disabled={busy}>{busy ? 'Opening Razorpay…' : 'Continue with Razorpay'}</button>
-        {message && <div className="form-msg">{message}</div>}
-      </div>
-    </div>
+  let title, text
+  if (billing.status === 'cancelled' || billing.cancel_at_period_end) {
+    title = 'Subscription cancelled'
+    text = 'You have access until ' + fmt(until) + '. Restart any time from Settings.'
+  } else if (billing.status === 'past_due') {
+    title = 'Payment failed'
+    text = 'Razorpay could not charge your payment method. Update it to avoid interruption.'
+  } else if (trialMs > 0) {
+    title = 'Free trial · billing authorized'
+    text = daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + ' left. Your plan starts on ' + fmt(billing.trial_ends_at) + ' unless you cancel.'
+  } else {
+    return null
   }
 
   return <div className="billing-banner">
-    <div>
-      <strong>{active ? 'Subscription active' : authorized ? 'Trial active · billing authorized' : '7-day free trial'}</strong>
-      <span>{active ? 'Razorpay subscription is active.' : daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + ' remaining in your trial.'}</span>
-    </div>
-    {!active && billing.status !== 'authenticated' && <button className="ghost" onClick={startBilling} disabled={busy}>{busy ? 'Opening…' : 'Set up billing'}</button>}
-    {message && <small>{message}</small>}
+    <div><strong>{title}</strong><span>{text}</span></div>
+    <button className="ghost" onClick={onOpenSettings}>Manage subscription</button>
   </div>
 }
 
@@ -888,7 +775,7 @@ function AppointmentRow({ a }) {
   }
   const [label,tone] = map[a.status] || [a.status,'wait']
   return <div className="appt-row">
-    <div className="appt-time">{a.time}</div>
+    <div className="appt-time">{a.date && <small>{a.date}</small>}{a.time}</div>
     <div className="client-cell"><div className="tiny-avatar">{a.client.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><strong>{a.client}</strong><span>{a.service}</span></div></div>
     <div className="appt-value">{money(a.value)}</div>
     <div><span className={'status ' + tone}>{tone === 'recover' && <RefreshCw size={12}/>} {label}</span></div>
@@ -907,7 +794,7 @@ function Appointments({ appointments, onNew }) {
 
 function Recovery({ waitlist, onNew }) {
   return <div className="page">
-    <div className="page-heading"><div><div className="eyebrow-dark">AUTOMATED CAPACITY RECOVERY</div><h1>Recovery engine</h1><p>Turn cancellations into a sequenced waitlist offer before the slot goes cold.</p></div><button className="primary" onClick={onNew}><Plus size={17}/>Add to waitlist</button></div>
+    <div className="page-heading"><div><div className="eyebrow-dark">AUTOMATED CAPACITY RECOVERY</div><h1>Recovery engine</h1><p>Turn cancellations into a sequenced waitlist offer before the slot goes cold.</p></div></div>
     <div className="recovery-flow">
       <FlowStep n="01" title="Cancellation detected" text="The original appointment is marked at risk and the slot becomes recoverable." icon={XCircle}/>
       <FlowStep n="02" title="Best waitlist match" text="Service, timing, notice preference, and priority determine who gets the offer first." icon={UsersRound}/>
@@ -915,13 +802,13 @@ function Recovery({ waitlist, onNew }) {
       <FlowStep n="04" title="Revenue recovered" text="The replacement appointment is booked and attributed to recovered revenue." icon={CircleDollarSign}/>
     </div>
     <section className="panel waitlist-panel">
-      <div className="panel-head"><div><h2>Current waitlist</h2><p>Live candidates eligible for cancellation recovery.</p></div></div>
+      <div className="panel-head"><div><h2>Current waitlist</h2><p>Clients waiting for a time that was booked. Added from New appointment or the client reschedule page.</p></div></div>
       {waitlist?.length ? waitlist.map(w => <div className="wait-row" key={w.id}>
         <div className="tiny-avatar">{w.client.split(' ').map(x=>x[0]).slice(0,2).join('')}</div>
         <div><strong>{w.client}</strong><span>{w.service} · {w.window}</span></div>
         <div className="appt-value">{money(w.value)}</div>
         <span className={'status ' + (w.status === 'active' ? 'ok' : 'wait')}>{w.status}</span>
-      </div>) : <div className="empty-inline"><UsersRound size={22}/><strong>No waitlist entries</strong><span>Add a client who wants an earlier or specific appointment window.</span></div>}
+      </div>) : <div className="empty-inline"><UsersRound size={22}/><strong>No waitlist entries</strong><span>When a client's preferred time is taken in New appointment, add them to the waitlist from there.</span><button className="ghost small" onClick={onNew}><Plus size={15}/>New appointment</button></div>}
     </section>
   </div>
 }
@@ -930,106 +817,21 @@ function FlowStep({ n, title, text, icon: Icon }) {
   return <div className="flow-step"><div className="flow-top"><span>{n}</span><div className="flow-icon"><Icon size={18}/></div></div><h3>{title}</h3><p>{text}</p></div>
 }
 
-function AppointmentModal({ practiceId, services, onClose, onSaved }) {
-  const [form, setForm] = useState({ first_name:'', last_name:'', email:'', phone:'', service_id:services[0]?.id||'', start_at:'' })
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (!form.service_id && services.length) {
-      setForm(current => ({ ...current, service_id: services[0].id }))
-    }
-  }, [services, form.service_id])
-
-  async function save(e) {
-    e.preventDefault(); setBusy(true); setError('')
-    const serviceId = form.service_id || services[0]?.id
-    if (!practiceId || !serviceId) {
-      setBusy(false)
-      return setError('Workspace or service is still loading. Please close this form and try again.')
-    }
-    const { error } = await supabase.rpc('create_appointment', {
-      p_practice_id: practiceId,
-      p_service_id: serviceId,
-      p_first_name: form.first_name,
-      p_last_name: form.last_name,
-      p_email: form.email,
-      p_phone: form.phone,
-      p_start_at: form.start_at ? new Date(form.start_at).toISOString() : null
-    })
-    setBusy(false)
-    if (error) return setError(error.message)
-    onSaved()
-  }
-  return <Modal title="New appointment" subtitle="Create a client and booking in one step." onClose={onClose}>
-    <form className="modal-form" onSubmit={save}>
-      <div className="form-grid"><Field label="First name"><input required value={form.first_name} onChange={e=>setForm({...form,first_name:e.target.value})}/></Field><Field label="Last name"><input value={form.last_name} onChange={e=>setForm({...form,last_name:e.target.value})}/></Field></div>
-      <Field label="Service"><select required value={form.service_id || services[0]?.id || ''} onChange={e=>setForm({...form,service_id:e.target.value})}>{services.map(s=><option value={s.id} key={s.id}>{s.name} · {money(s.price_cents/100)}</option>)}</select></Field>
-      <Field label="Start date & time"><input required type="datetime-local" value={form.start_at} onChange={e=>setForm({...form,start_at:e.target.value})}/></Field>
-      <div className="form-grid"><Field label="Email"><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></Field><Field label="Phone"><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></Field></div>
-      {error && <div className="form-msg">{error}</div>}
-      <div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary" disabled={busy||!services.length}>{busy?'Creating…':'Create appointment'}</button></div>
-    </form>
-  </Modal>
-}
-
-function WaitlistModal({ practiceId, services, onClose, onSaved }) {
-  const [form, setForm] = useState({ first_name:'', last_name:'', email:'', phone:'', service_id:services[0]?.id||'', window_start:'', window_end:'', min_notice_minutes:60 })
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (!form.service_id && services.length) {
-      setForm(current => ({ ...current, service_id: services[0].id }))
-    }
-  }, [services, form.service_id])
-
-  async function save(e) {
-    e.preventDefault(); setBusy(true); setError('')
-    const serviceId = form.service_id || services[0]?.id
-    if (!practiceId || !serviceId) {
-      setBusy(false)
-      return setError('Workspace or service is still loading. Please close this form and try again.')
-    }
-    const { error } = await supabase.rpc('add_waitlist_entry', {
-      p_practice_id: practiceId,
-      p_service_id: serviceId,
-      p_first_name: form.first_name,
-      p_last_name: form.last_name,
-      p_email: form.email,
-      p_phone: form.phone,
-      p_window_start: form.window_start ? new Date(form.window_start).toISOString() : null,
-      p_window_end: form.window_end ? new Date(form.window_end).toISOString() : null,
-      p_min_notice_minutes: Number(form.min_notice_minutes)
-    })
-    setBusy(false)
-    if (error) return setError(error.message)
-    onSaved()
-  }
-  return <Modal title="Add to waitlist" subtitle="SlotRecover will use this window when a matching cancellation opens." onClose={onClose}>
-    <form className="modal-form" onSubmit={save}>
-      <div className="form-grid"><Field label="First name"><input required value={form.first_name} onChange={e=>setForm({...form,first_name:e.target.value})}/></Field><Field label="Last name"><input value={form.last_name} onChange={e=>setForm({...form,last_name:e.target.value})}/></Field></div>
-      <Field label="Service"><select required value={form.service_id || services[0]?.id || ''} onChange={e=>setForm({...form,service_id:e.target.value})}>{services.map(s=><option value={s.id} key={s.id}>{s.name} · {money(s.price_cents/100)}</option>)}</select></Field>
-      <div className="form-grid"><Field label="Window starts"><input required type="datetime-local" value={form.window_start} onChange={e=>setForm({...form,window_start:e.target.value})}/></Field><Field label="Window ends"><input required type="datetime-local" value={form.window_end} onChange={e=>setForm({...form,window_end:e.target.value})}/></Field></div>
-      <div className="form-grid"><Field label="Email"><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></Field><Field label="Phone"><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></Field></div>
-      <Field label="Minimum notice (minutes)"><input type="number" min="0" value={form.min_notice_minutes} onChange={e=>setForm({...form,min_notice_minutes:e.target.value})}/></Field>
-      {error && <div className="form-msg">{error}</div>}
-      <div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary" disabled={busy||!services.length}>{busy?'Adding…':'Add to waitlist'}</button></div>
-    </form>
-  </Modal>
-}
-
-function Modal({ title, subtitle, onClose, children }) {
-  return <div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget) onClose()}}>
-    <div className="modal-card">
-      <div className="modal-head"><div><h2>{title}</h2><p>{subtitle}</p></div><button className="icon-btn" onClick={onClose}><X size={18}/></button></div>
-      {children}
-    </div>
+function DemoNotice({ onClose }) {
+  return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-card"><div className="modal-form">
+      <h2 className="demo-title">Demo workspace</h2>
+      <p className="confirm-text">Booking is disabled in the demo. Create a free account to add appointments, see live availability and build a waitlist.</p>
+      <div className="modal-actions"><button className="primary" onClick={onClose}>Got it</button></div>
+    </div></div>
   </div>
 }
 
-function Field({ label, children }) {
-  return <label className="field"><span>{label}</span>{children}</label>
+function formatWindow(start, end, tz) {
+  const opts = { timeZone: tz || undefined }
+  const d = x => new Date(x).toLocaleDateString([], { ...opts, month: 'short', day: 'numeric' })
+  const t = x => new Date(x).toLocaleTimeString([], { ...opts, hour: 'numeric', minute: '2-digit' })
+  return d(start) === d(end) ? d(start) + ', ' + t(start) + ' – ' + t(end) : d(start) + ' ' + t(start) + ' – ' + d(end) + ' ' + t(end)
 }
 
 function EmptyPanel({ title, text, icon: Icon }) {
