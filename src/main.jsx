@@ -511,11 +511,23 @@ function AppointmentModal({ practiceId, services, onClose, onSaved }) {
   const [form, setForm] = useState({ first_name:'', last_name:'', email:'', phone:'', service_id:services[0]?.id||'', start_at:'' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!form.service_id && services.length) {
+      setForm(current => ({ ...current, service_id: services[0].id }))
+    }
+  }, [services, form.service_id])
+
   async function save(e) {
     e.preventDefault(); setBusy(true); setError('')
+    const serviceId = form.service_id || services[0]?.id
+    if (!practiceId || !serviceId) {
+      setBusy(false)
+      return setError('Workspace or service is still loading. Please close this form and try again.')
+    }
     const { error } = await supabase.rpc('create_appointment', {
       p_practice_id: practiceId,
-      p_service_id: form.service_id,
+      p_service_id: serviceId,
       p_first_name: form.first_name,
       p_last_name: form.last_name,
       p_email: form.email,
@@ -529,7 +541,7 @@ function AppointmentModal({ practiceId, services, onClose, onSaved }) {
   return <Modal title="New appointment" subtitle="Create a client and booking in one step." onClose={onClose}>
     <form className="modal-form" onSubmit={save}>
       <div className="form-grid"><Field label="First name"><input required value={form.first_name} onChange={e=>setForm({...form,first_name:e.target.value})}/></Field><Field label="Last name"><input value={form.last_name} onChange={e=>setForm({...form,last_name:e.target.value})}/></Field></div>
-      <Field label="Service"><select required value={form.service_id} onChange={e=>setForm({...form,service_id:e.target.value})}>{services.map(s=><option value={s.id} key={s.id}>{s.name} · {money(s.price_cents/100)}</option>)}</select></Field>
+      <Field label="Service"><select required value={form.service_id || services[0]?.id || ''} onChange={e=>setForm({...form,service_id:e.target.value})}>{services.map(s=><option value={s.id} key={s.id}>{s.name} · {money(s.price_cents/100)}</option>)}</select></Field>
       <Field label="Start date & time"><input required type="datetime-local" value={form.start_at} onChange={e=>setForm({...form,start_at:e.target.value})}/></Field>
       <div className="form-grid"><Field label="Email"><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></Field><Field label="Phone"><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></Field></div>
       {error && <div className="form-msg">{error}</div>}
@@ -542,11 +554,23 @@ function WaitlistModal({ practiceId, services, onClose, onSaved }) {
   const [form, setForm] = useState({ first_name:'', last_name:'', email:'', phone:'', service_id:services[0]?.id||'', window_start:'', window_end:'', min_notice_minutes:60 })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!form.service_id && services.length) {
+      setForm(current => ({ ...current, service_id: services[0].id }))
+    }
+  }, [services, form.service_id])
+
   async function save(e) {
     e.preventDefault(); setBusy(true); setError('')
+    const serviceId = form.service_id || services[0]?.id
+    if (!practiceId || !serviceId) {
+      setBusy(false)
+      return setError('Workspace or service is still loading. Please close this form and try again.')
+    }
     const { error } = await supabase.rpc('add_waitlist_entry', {
       p_practice_id: practiceId,
-      p_service_id: form.service_id,
+      p_service_id: serviceId,
       p_first_name: form.first_name,
       p_last_name: form.last_name,
       p_email: form.email,
@@ -562,7 +586,7 @@ function WaitlistModal({ practiceId, services, onClose, onSaved }) {
   return <Modal title="Add to waitlist" subtitle="SlotRecover will use this window when a matching cancellation opens." onClose={onClose}>
     <form className="modal-form" onSubmit={save}>
       <div className="form-grid"><Field label="First name"><input required value={form.first_name} onChange={e=>setForm({...form,first_name:e.target.value})}/></Field><Field label="Last name"><input value={form.last_name} onChange={e=>setForm({...form,last_name:e.target.value})}/></Field></div>
-      <Field label="Service"><select required value={form.service_id} onChange={e=>setForm({...form,service_id:e.target.value})}>{services.map(s=><option value={s.id} key={s.id}>{s.name} · {money(s.price_cents/100)}</option>)}</select></Field>
+      <Field label="Service"><select required value={form.service_id || services[0]?.id || ''} onChange={e=>setForm({...form,service_id:e.target.value})}>{services.map(s=><option value={s.id} key={s.id}>{s.name} · {money(s.price_cents/100)}</option>)}</select></Field>
       <div className="form-grid"><Field label="Window starts"><input required type="datetime-local" value={form.window_start} onChange={e=>setForm({...form,window_start:e.target.value})}/></Field><Field label="Window ends"><input required type="datetime-local" value={form.window_end} onChange={e=>setForm({...form,window_end:e.target.value})}/></Field></div>
       <div className="form-grid"><Field label="Email"><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></Field><Field label="Phone"><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></Field></div>
       <Field label="Minimum notice (minutes)"><input type="number" min="0" value={form.min_notice_minutes} onChange={e=>setForm({...form,min_notice_minutes:e.target.value})}/></Field>
