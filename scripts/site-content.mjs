@@ -11,7 +11,7 @@ export const PRICES = {
   USD: { amount: 29, symbol: '$', label: 'USD' },
   EUR: { amount: 27, symbol: '€', label: 'EUR' },
   GBP: { amount: 24, symbol: '£', label: 'GBP' },
-  INR: { amount: 1499, symbol: '₹', label: 'INR' },
+  INR: { amount: 299, symbol: '₹', label: 'INR' },
 }
 export const TRIAL_DAYS = 7
 
