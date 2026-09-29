@@ -42,9 +42,71 @@ function App() {
     return () => sub.subscription.unsubscribe()
   }, [])
 
+  const query = new URLSearchParams(window.location.search)
+  const publicAction = query.get('action')
+  const publicToken = query.get('token')
+
+  if (publicAction && publicToken && ['confirm','cancel','reschedule'].includes(publicAction)) {
+    return <PublicActionPage action={publicAction} token={publicToken} />
+  }
+
   if (loading) return <div className="boot"><div className="spinner" />Loading workspace…</div>
   if (!session && !demo) return <AuthScreen onDemo={() => setDemo(true)} />
   return <Dashboard session={session} demo={demo} onExitDemo={() => setDemo(false)} />
+}
+
+function PublicActionPage({ action, token }) {
+  const [state, setState] = useState(action === 'reschedule' ? 'ready' : 'working')
+  const [message, setMessage] = useState('')
+  const [when, setWhen] = useState('')
+
+  useEffect(() => {
+    if (action === 'confirm' || action === 'cancel') {
+      ;(async () => {
+        const { data, error } = await supabase.functions.invoke('slotrecover-public-action', {
+          body: { type: 'appointment', token, action }
+        })
+        if (error || data?.error) {
+          setState('error')
+          setMessage(error?.message || data?.message || data?.error || 'Unable to process this request.')
+          return
+        }
+        setState('success')
+        setMessage(action === 'confirm' ? 'Your appointment is confirmed.' : 'Your appointment has been cancelled.')
+      })()
+    }
+  }, [action, token])
+
+  async function submitReschedule(e) {
+    e.preventDefault()
+    setState('working')
+    const { data, error } = await supabase.functions.invoke('slotrecover-public-action', {
+      body: { type: 'appointment', token, action: 'reschedule', start_at: new Date(when).toISOString() }
+    })
+    if (error || data?.error || data?.ok === false) {
+      setState('error')
+      setMessage(data?.reason === 'slot_unavailable' ? 'That time is no longer available. Please choose another time.' : error?.message || data?.message || data?.error || 'Unable to reschedule.')
+      return
+    }
+    setState('success')
+    setMessage('Your appointment has been rescheduled and confirmed.')
+  }
+
+  return <div className="public-shell">
+    <div className="public-card">
+      <div className="public-brand">SlotRecover</div>
+      <div className="public-icon">{state === 'success' ? <CheckCircle2 size={30}/> : action === 'cancel' ? <XCircle size={30}/> : <CalendarDays size={30}/>}</div>
+      <div className="eyebrow-dark">APPOINTMENT RESPONSE</div>
+      <h1>{action === 'confirm' ? 'Confirm appointment' : action === 'cancel' ? 'Cancel appointment' : 'Reschedule appointment'}</h1>
+      {action === 'reschedule' && state === 'ready' ? <form className="public-form" onSubmit={submitReschedule}>
+        <p>Choose your preferred date and time. SlotRecover will verify that the time is still available before moving your appointment.</p>
+        <label>Preferred date & time</label>
+        <input type="datetime-local" required value={when} onChange={e => setWhen(e.target.value)} />
+        <button className="primary wide">Check & reschedule</button>
+      </form> : <p className="public-message">{state === 'working' ? 'Processing your request…' : message}</p>}
+      {state === 'error' && action === 'reschedule' && <button className="ghost wide" onClick={() => { setState('ready'); setMessage('') }}>Choose another time</button>}
+    </div>
+  </div>
 }
 
 function AuthScreen({ onDemo }) {
