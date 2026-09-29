@@ -259,7 +259,7 @@ ${faqBlock(ind.faqs, `${ind.name}: common questions`)}
   <h2 class="h3">Also built for</h2>
   <div class="chips">${related.map(r => `<a class="chip" href="/industries/${r.slug}">${esc(r.short)}</a>`).join('')}<a class="chip" href="/industries">All industries →</a></div>
 </div></section>
-${ctaBand(`Fill more appointments at your ${ind.name.toLowerCase().replace(/s$/, '')} business.`)}`
+${ctaBand('Start filling cancelled appointments today.')}`
   return layout({ route: `/industries/${ind.slug}`, title: ind.title, description: ind.desc, body, jsonLd: [faqLd(ind.faqs), crumbs([['Home', '/'], ['Industries', '/industries'], [ind.name, `/industries/${ind.slug}`]])] })
 }
 
