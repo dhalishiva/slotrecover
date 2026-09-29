@@ -10,7 +10,7 @@ import { supabase, supabaseConfigured } from './supabase'
 import { LegalPage, isLegalPath } from './legal'
 import { HelpCenter, HelpBubble } from './help'
 import { money, setMoneyCurrency, LogoMark } from './ui'
-import { hasAccess, startCheckout, fetchBillingStatus, accessUntil } from './billingClient'
+import { hasAccess, startCheckout, fetchBillingStatus, accessUntil, detectCurrency } from './billingClient'
 import { SettingsPage } from './settings'
 import { AppointmentModal } from './booking'
 import { ReminderModal, fetchReminderAppointment, reminderSelect } from './whatsapp'
@@ -98,7 +98,7 @@ function AppContent() {
     return <PublicActionPage action={publicAction} token={publicToken} />
   }
 
-  if (recovery && session) return <SetNewPasswordScreen onDone={() => { setRecovery(false); window.history.replaceState({}, '', '/') }} />
+  if (recovery && session) return <SetNewPasswordScreen onDone={() => { setRecovery(false); window.history.replaceState({}, '', '/app') }} />
   if (loading || (recovery && !session && openedFromRecoveryLink) || (session && !demo && billingLoading)) return <div className="boot"><div className="spinner" />Loading workspace…</div>
   if (!session && !demo) return <AuthScreen onDemo={() => setDemo(true)} onRecoveryStart={() => setRecovery(true)} onRecoveryFailed={() => setRecovery(false)} />
   if (session && !demo && billing && !hasAccess(billing)) {
@@ -110,6 +110,8 @@ function AppContent() {
 function BillingSetupScreen({ billing, onReady }) {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [localCurrency, setLocalCurrency] = useState(null)
+  useEffect(() => { detectCurrency().then(setLocalCurrency) }, [])
 
   async function startBilling() {
     setBusy(true); setMessage('')
@@ -165,6 +167,7 @@ function BillingSetupScreen({ billing, onReady }) {
       <small className="renewal-note">{trialLeft
         ? <>Your subscription starts automatically when the trial ends and renews every {periodWord} at {formattedAmount} plus applicable taxes until you cancel. Cancel any time before the trial ends and you won't be charged. </>
         : <>You'll be charged {formattedAmount} today and every {periodWord} after that, plus applicable taxes, until you cancel in Settings. </>}{legal}</small>
+      {localCurrency && localCurrency !== currency && <small className="currency-note">Billing in {localCurrency} is coming soon. For now your plan is charged in {currency}, and your bank converts it.</small>}
       {message && <div className="form-msg">{message}</div>}
       <button type="button" className="text-btn signout-link" onClick={() => supabase.auth.signOut()}>Sign out</button>
     </div>
@@ -365,7 +368,7 @@ function SetNewPasswordScreen({ onDone }) {
 }
 
 function AuthScreen({ onDemo, onRecoveryStart, onRecoveryFailed }) {
-  const [mode, setMode] = useState('signin')
+  const [mode, setMode] = useState(() => new URLSearchParams(window.location.search).get('signup') ? 'signup' : 'signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [otp, setOtp] = useState('')
@@ -383,7 +386,7 @@ function AuthScreen({ onDemo, onRecoveryStart, onRecoveryFailed }) {
 
     if (mode === 'forgot') {
       if (!resetSent) {
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin + '/' })
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin + '/app' })
         setBusy(false)
         if (error) return setMsg(error.message)
         setResetSent(true)

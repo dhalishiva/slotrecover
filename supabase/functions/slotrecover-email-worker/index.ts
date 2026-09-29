@@ -90,9 +90,9 @@ Deno.serve(async (req) => {
 
     if (existing?.sent_at || existing?.status === "sent") continue;
 
-    const confirmUrl = appUrl + "/?action=confirm&token=" + appt.public_token;
-    const rescheduleUrl = appUrl + "/?action=reschedule&token=" + appt.public_token;
-    const cancelUrl = appUrl + "/?action=cancel&token=" + appt.public_token;
+    const confirmUrl = appUrl + "/app?action=confirm&token=" + appt.public_token;
+    const rescheduleUrl = appUrl + "/app?action=reschedule&token=" + appt.public_token;
+    const cancelUrl = appUrl + "/app?action=cancel&token=" + appt.public_token;
     const start = formatStart(appt.start_at, appt.practices?.timezone);
     const withWho = appt.staff?.name ? " with " + esc(appt.staff.name) : "";
     const business = appt.practices?.name ? " at " + esc(appt.practices.name) : "";
@@ -131,7 +131,7 @@ Deno.serve(async (req) => {
         practice_id: appt.practice_id,
         title: "Confirmation sent · " + (appt.clients.first_name || "Client") + " " + (appt.clients.last_name || ""),
         body: appt.services.name + (appt.staff?.name ? " with " + appt.staff.name : "") + " · " + start + ". Tap to send a WhatsApp reminder.",
-        url: "/?remind=" + appt.id,
+        url: "/app?remind=" + appt.id,
         tag: "confirm-" + appt.id,
       });
     } catch (e) {
@@ -152,8 +152,8 @@ Deno.serve(async (req) => {
 
   for (const offer of offers || []) {
     if (!offer.clients?.email) continue;
-    const acceptUrl = appUrl + "/?action=recovery&decision=accept&token=" + offer.public_token;
-    const declineUrl = appUrl + "/?action=recovery&decision=decline&token=" + offer.public_token;
+    const acceptUrl = appUrl + "/app?action=recovery&decision=accept&token=" + offer.public_token;
+    const declineUrl = appUrl + "/app?action=recovery&decision=decline&token=" + offer.public_token;
     const start = formatStart(offer.appointments.start_at, offer.practices?.timezone);
     const price = formatPrice(offer.appointments.services?.price_cents || 0, offer.practices?.currency);
     const business = offer.practices?.name ? " at " + offer.practices.name : "";

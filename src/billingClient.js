@@ -1,6 +1,24 @@
 import { supabase } from './supabase'
 import { invokeError } from './ui'
 
+// Visitor's pricing currency: country from Vercel's edge (/api/geo), else a timezone guess.
+let currencyPromise = null
+export function detectCurrency() {
+  if (!currencyPromise) {
+    const guess = () => {
+      try {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+        if (/^Asia\/(Kolkata|Calcutta)/.test(tz)) return 'INR'
+        if (tz === 'Europe/London') return 'GBP'
+        if (/^Europe\//.test(tz)) return 'EUR'
+      } catch {}
+      return 'USD'
+    }
+    currencyPromise = fetch('/api/geo').then(r => (r.ok ? r.json() : null)).then(d => d?.currency || guess()).catch(guess)
+  }
+  return currencyPromise
+}
+
 // Access continues after cancellation until the paid/trial period ends.
 export function accessUntil(billing) {
   if (!billing) return null
@@ -32,7 +50,8 @@ function loadRazorpay() {
 // Creates (or reuses) the Razorpay subscription, opens Checkout and verifies it.
 // Resolves to { ok: true } or { ok: false, message }, or { ok: false, dismissed: true }.
 export async function startCheckout() {
-  const { data, error } = await supabase.functions.invoke('slotrecover-billing', { body: { action: 'create_subscription' } })
+  const currency = await detectCurrency()
+  const { data, error } = await supabase.functions.invoke('slotrecover-billing', { body: { action: 'create_subscription', currency } })
   if (error || data?.error) return { ok: false, message: await invokeError(error, data, 'Unable to start Razorpay.') }
   if (!(await loadRazorpay())) return { ok: false, message: 'Unable to load Razorpay Checkout.' }
 

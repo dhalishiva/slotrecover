@@ -28,9 +28,9 @@ export function buildReminderText(appt, practice) {
     '',
     `Reminder: your ${service} appointment${staff ? ' with ' + staff : ''} is on ${day} at ${time}.`,
     '',
-    `✅ Confirm: ${base}/?action=confirm&token=${appt.public_token}`,
-    `🔁 Reschedule: ${base}/?action=reschedule&token=${appt.public_token}`,
-    `❌ Cancel: ${base}/?action=cancel&token=${appt.public_token}`,
+    `✅ Confirm: ${base}/app?action=confirm&token=${appt.public_token}`,
+    `🔁 Reschedule: ${base}/app?action=reschedule&token=${appt.public_token}`,
+    `❌ Cancel: ${base}/app?action=cancel&token=${appt.public_token}`,
   ]
   if (practice?.client_note) lines.push('', `Note: ${practice.client_note}`)
   return lines.join('\n')

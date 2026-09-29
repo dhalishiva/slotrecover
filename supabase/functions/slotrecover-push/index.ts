@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
       const sent = await sendPush(admin, appServer, subs || [], {
         title: "Notifications are on",
         body: "You'll hear from SlotRecover when a confirmation email goes out.",
-        url: "/",
+        url: "/app",
         tag: "slotrecover-test",
       });
       return respond({ ok: true, sent, devices: (subs || []).length });

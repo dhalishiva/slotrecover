@@ -14,7 +14,7 @@ export async function getPushServer(admin: any) {
     stored = res.data;
   }
   const vapidKeys = await webpush.importVapidKeys(JSON.parse(stored), { extractable: false });
-  const contact = Deno.env.get("SLOTRECOVER_PUSH_CONTACT") || "mailto:support@slotrecover.com";
+  const contact = Deno.env.get("SLOTRECOVER_PUSH_CONTACT") || "mailto:support@slotrecover.pro";
   const appServer = await webpush.ApplicationServer.new({ contactInformation: contact, vapidKeys });
   const publicKey = await webpush.exportApplicationServerKey(vapidKeys);
   return { appServer, publicKey };

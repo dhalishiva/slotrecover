@@ -157,12 +157,15 @@ function Privacy() {
 function Cookies() {
   return <>
     <S h="Summary">
-      <p>{site.product} does not use advertising or analytics cookies. We only use browser storage that is strictly necessary to provide the Service you ask for. Under EU and UK law (the ePrivacy Directive and PECR), strictly necessary storage does not require consent, so we do not show a cookie banner. If we ever add optional analytics or marketing tools, we will ask for your consent first.</p>
+      <p>{site.product} does not use advertising cookies. We use browser storage that is strictly necessary to provide the Service, plus privacy-friendly analytics that do not use cookies. Under EU and UK law (the ePrivacy Directive and PECR), strictly necessary storage does not require consent. If we enable Google Analytics on our website, it only runs after you accept it in the cookie banner.</p>
     </S>
     <S h="What we use">
       <table><tbody>
         <tr><th>Name / type</th><th>Provider</th><th>Purpose</th><th>Duration</th></tr>
         <tr><td>Supabase auth session (browser local storage)</td><td>{site.product} via Supabase</td><td>Keeps you signed in and secures your session</td><td>Until you sign out or the session expires</td></tr>
+        <tr><td>Vercel Web Analytics (no cookies)</td><td>Vercel</td><td>Counts page views and referrers on our website without cookies or cross-site tracking; no personal profile is created</td><td>Not stored on your device</td></tr>
+        <tr><td>Currency preference (local storage)</td><td>{site.product}</td><td>Remembers the currency you chose on the pricing page</td><td>Until cleared</td></tr>
+        <tr><td>Google Analytics cookies (_ga, _ga_*) — only if enabled and you accept</td><td>Google</td><td>Measures how visitors find and use our marketing website</td><td>Up to 13 months</td></tr>
         <tr><td>Razorpay Checkout cookies</td><td>Razorpay</td><td>Processes your subscription authorisation and prevents payment fraud; only set when you open checkout</td><td>Set by Razorpay; see Razorpay's policy</td></tr>
       </tbody></table>
     </S>
@@ -231,7 +234,7 @@ function Dpa() {
 function Subprocessors() {
   const rows = [
     ['Supabase, Inc.', 'Database, authentication, serverless functions and scheduled jobs', site.dataRegion + '; USA (support and operations)'],
-    ['Vercel, Inc.', 'Web hosting and content delivery for the application', 'Global edge network; USA'],
+    ['Vercel, Inc.', 'Web hosting, content delivery and cookieless website analytics', 'Global edge network; USA'],
     ['Razorpay Software Private Limited', 'Subscription billing and payment processing (account holders only)', 'India'],
     ['[Email delivery provider — TODO]', 'Sending account verification, appointment confirmation and recovery emails', '[Region — TODO]'],
   ]
@@ -336,7 +339,7 @@ export const isLegalPath = (path) => Boolean(docs[path])
 export function SiteHeader() {
   return <header className="site-header">
     <a href="/" className="site-brand"><LogoMark size={30}/>{site.product}</a>
-    <a href="/" className="site-back"><ArrowLeft size={15}/> Back to app</a>
+    <a href="/app" className="site-back"><ArrowLeft size={15}/> Back to app</a>
   </header>
 }
 

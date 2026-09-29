@@ -9,13 +9,13 @@ export const site = {
   // TODO: full registered postal address (required on invoices, GDPR and CAN-SPAM)
   address: '[Registered business address], Noida, Uttar Pradesh, India',
   // TODO: replace with mailboxes on your own domain
-  supportEmail: 'support@slotrecover.com',
-  privacyEmail: 'privacy@slotrecover.com',
-  billingEmail: 'billing@slotrecover.com',
-  url: 'https://slotrecover.vercel.app',
+  supportEmail: 'support@slotrecover.pro',
+  privacyEmail: 'privacy@slotrecover.pro',
+  billingEmail: 'billing@slotrecover.pro',
+  url: 'https://www.slotrecover.pro',
   // TODO: appoint before actively marketing to the EU / UK (GDPR Art. 27)
-  euRepresentative: 'To be appointed. Until then, contact privacy@slotrecover.com.',
-  ukRepresentative: 'To be appointed. Until then, contact privacy@slotrecover.com.',
+  euRepresentative: 'To be appointed. Until then, contact privacy@slotrecover.pro.',
+  ukRepresentative: 'To be appointed. Until then, contact privacy@slotrecover.pro.',
   governingLaw: 'the laws of India',
   venue: 'the courts of New Delhi, India',
   effectiveDate: 'September 29, 2026',

@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
 
     const { data: billing, error: billingError } = await admin
       .from("billing_accounts")
-      .select("user_id,status,trial_started_at,trial_ends_at,razorpay_subscription_id,razorpay_payment_id,authorization_verified_at,current_period_start,current_period_end,cancel_at_period_end,plan_id,billing_plans(id,code,name,amount_paise,currency,period,interval_count,trial_days,razorpay_plan_id,test_mode)")
+      .select("user_id,status,trial_started_at,trial_ends_at,razorpay_subscription_id,razorpay_payment_id,authorization_verified_at,current_period_start,current_period_end,cancel_at_period_end,plan_id,billing_plans(id,code,name,amount_paise,currency,period,interval_count,trial_days,razorpay_plan_id,test_mode,plan_group)")
       .eq("user_id", user.id)
       .single();
 
@@ -115,6 +115,24 @@ Deno.serve(async (req) => {
     }
 
     if (action === "create_subscription") {
+      // Prefer a plan in the visitor's currency when one is active and no live subscription exists yet.
+      const wanted = String(body?.currency || "").toUpperCase();
+      const canSwitch = !billing.razorpay_subscription_id || ["cancelled", "expired", "halted"].includes(billing.status);
+      if (wanted && canSwitch && wanted !== billing.billing_plans?.currency) {
+        const { data: regional } = await admin
+          .from("billing_plans")
+          .select("id,code,name,amount_paise,currency,period,interval_count,trial_days,razorpay_plan_id,test_mode,plan_group")
+          .eq("plan_group", billing.billing_plans?.plan_group || "standard")
+          .eq("currency", wanted)
+          .eq("active", true)
+          .maybeSingle();
+        if (regional) {
+          await admin.from("billing_accounts").update({ plan_id: regional.id, updated_at: new Date().toISOString() }).eq("user_id", user.id);
+          billing.plan_id = regional.id;
+          billing.billing_plans = regional;
+        }
+      }
+
       let razorpayPlanId = billing.billing_plans?.razorpay_plan_id;
 
       if (!razorpayPlanId) {
