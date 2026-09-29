@@ -4,7 +4,7 @@ import {
   Activity, ArrowUpRight, BellRing, CalendarDays, CheckCircle2, ChevronRight,
   CircleDollarSign, Clock3, LayoutDashboard, LogOut, Menu, MessageCircleMore,
   Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, UsersRound,
-  WandSparkles, X, XCircle, HelpCircle
+  WandSparkles, X, XCircle, HelpCircle, Download
 } from 'lucide-react'
 import { supabase, supabaseConfigured } from './supabase'
 import { LegalPage, isLegalPath } from './legal'
@@ -14,6 +14,8 @@ import { hasAccess, startCheckout, fetchBillingStatus, accessUntil } from './bil
 import { SettingsPage } from './settings'
 import { AppointmentModal } from './booking'
 import { ReminderModal, fetchReminderAppointment, reminderSelect } from './whatsapp'
+import { registerServiceWorker } from './pwa'
+import { InstallModal, useInstallState } from './appInstall'
 import '@fontsource/dm-sans/400.css'
 import '@fontsource/dm-sans/500.css'
 import '@fontsource/dm-sans/600.css'
@@ -480,6 +482,8 @@ function Dashboard({ session, demo, onExitDemo }) {
   const [modal, setModal] = useState(null)
   const [toast, setToast] = useState('')
   const [reminder, setReminder] = useState(null)
+  const [showInstall, setShowInstall] = useState(false)
+  const install = useInstallState()
   const emptyData = { appointments: [], revenue: 0, atRisk: 0, recoveryRate: 0, noShow: 0, recoveredSlots: 0, cancelledSlots: 0, activity: [], waitlist: [] }
   const [loaded, setLoaded] = useState(demo)
   const [data, setData] = useState(!demo ? emptyData : {
@@ -639,6 +643,7 @@ function Dashboard({ session, demo, onExitDemo }) {
         </button>)}
       </nav>
       <div className="sidebar-bottom">
+        {!install.standalone && <button onClick={() => { setShowInstall(true); setMobileNav(false) }}><Download size={18}/>Install app</button>}
         <button onClick={() => { window.location.href = '/help' }}><HelpCircle size={18}/>Help Center</button>
         <button className={nav === 'Settings' ? 'active' : ''} onClick={() => { setNav('Settings'); setMobileNav(false) }}><Settings size={18}/>Settings</button>
         <button onClick={signOut}><LogOut size={18}/>{demo ? 'Exit demo' : 'Sign out'}</button>
@@ -673,6 +678,7 @@ function Dashboard({ session, demo, onExitDemo }) {
     {modal === 'appointment' && (demo
       ? <DemoNotice onClose={() => setModal(null)}/>
       : <AppointmentModal practiceId={practiceId} practice={practice} services={services} onClose={() => setModal(null)} onSaved={kind => { setModal(null); notify(kind === 'waitlist' ? 'Added to the waitlist' : 'Appointment created'); loadLive() }}/>)}
+    {showInstall && <InstallModal onClose={() => setShowInstall(false)}/>}
     {reminder && <ReminderModal appointment={reminder} practice={practice} onClose={() => setReminder(null)}/>}
     {toast && <div className="toast">{toast}</div>}
   </div>
@@ -882,4 +888,5 @@ function EmptyPanel({ title, text, icon: Icon }) {
   return <div className="page"><div className="empty-page"><div className="empty-big"><Icon size={28}/></div><h1>{title}</h1><p>{text}</p><button className="ghost">Preview planned workflow <ArrowUpRight size={16}/></button></div></div>
 }
 
+registerServiceWorker()
 createRoot(document.getElementById('root')).render(<App />)

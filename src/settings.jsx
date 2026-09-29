@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Building2, Clock3, CreditCard, MessageSquareText, Plus, Save, Scissors, UsersRound } from 'lucide-react'
+import { Building2, Clock3, CreditCard, Download, MessageSquareText, Plus, Save, Scissors, Smartphone, UsersRound } from 'lucide-react'
+import { InstallModal, NotificationsControl, useInstallState } from './appInstall'
 import { supabase } from './supabase'
 import { Field, Modal, money } from './ui'
 import { accessUntil, cancelSubscription, fetchBillingStatus, startCheckout } from './billingClient'
@@ -25,6 +26,7 @@ export function SettingsPage({ practice, demo, notify, onChanged }) {
     <ServicesSection practice={practice} notify={notify} onChanged={changedAll}/>
     <StaffSection practice={practice} notify={notify} onChanged={changedAll} rev={rev}/>
     <ClientMessageSection practice={practice} notify={notify} onChanged={onChanged}/>
+    <AppSection practice={practice} notify={notify}/>
     <BillingSection notify={notify}/>
   </div>
 }
@@ -332,5 +334,21 @@ function ClientMessageSection({ practice, notify, onChanged }) {
       {error && <div className="form-msg">{error}</div>}
       <div className="settings-actions"><button className="primary" disabled={busy}><Save size={16}/>{busy ? 'Saving…' : 'Save messages'}</button></div>
     </form>
+  </Section>
+}
+
+function AppSection({ practice, notify }) {
+  const st = useInstallState()
+  const [showInstall, setShowInstall] = useState(false)
+  return <Section icon={Smartphone} title="App & notifications" text="Install SlotRecover on your phone and get notified when confirmations go out.">
+    <div className="notif-row">
+      <div>
+        <strong>{st.standalone ? 'Installed on this device' : 'Install on this device'}</strong>
+        <span>{st.standalone ? 'You are using the installed app.' : st.isIOS ? 'On iPhone: Safari → Share → Add to Home Screen.' : 'Opens full screen from your home screen, like a native app.'}</span>
+      </div>
+      {!st.standalone && <div className="notif-actions"><button type="button" className="ghost small" onClick={() => setShowInstall(true)}><Download size={14}/>{st.canPrompt ? 'Install app' : 'How to install'}</button></div>}
+    </div>
+    <NotificationsControl practiceId={practice.id} notify={notify}/>
+    {showInstall && <InstallModal onClose={() => setShowInstall(false)}/>}
   </Section>
 }
