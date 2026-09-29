@@ -24,29 +24,6 @@ function normalizeSecret(raw: string | undefined | null) {
   return v;
 }
 
-// Safe, non-revealing description of a secret value.
-function describeSecret(raw: string | undefined | null, isKeyId = false) {
-  const present = typeof raw === "string" && raw.length > 0;
-  const value = raw || "";
-  const normalized = normalizeSecret(value);
-  const info: Record<string, unknown> = {
-    present,
-    raw_length: value.length,
-    normalized_length: normalized.length,
-    had_surrounding_whitespace: value !== value.trim(),
-    had_internal_whitespace: /\s/.test(normalized),
-    had_wrapping_quotes: /^\s*["']/.test(value) && /["']\s*$/.test(value),
-  };
-  if (isKeyId) {
-    info.prefix = normalized.startsWith("rzp_test_")
-      ? "rzp_test_"
-      : normalized.startsWith("rzp_live_")
-      ? "rzp_live_"
-      : "unexpected";
-  }
-  return info;
-}
-
 async function hmacHex(secret: string, message: string) {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -101,33 +78,6 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const action = String(body?.action || "status");
-
-    // TEMPORARY diagnostic: reports only non-sensitive metadata about the
-    // Razorpay secrets and whether Razorpay accepts them. Never returns values.
-    if (action === "diagnose_razorpay") {
-      const rawId = Deno.env.get("RAZORPAY_KEY_ID");
-      const rawSecret = Deno.env.get("RAZORPAY_KEY_SECRET");
-      const id = normalizeSecret(rawId);
-      const secret = normalizeSecret(rawSecret);
-      const result: Record<string, unknown> = {
-        key_id: describeSecret(rawId, true),
-        key_secret: describeSecret(rawSecret),
-        webhook_secret_present: Boolean(Deno.env.get("RAZORPAY_WEBHOOK_SECRET")),
-      };
-      if (id && secret) {
-        const probe = await razorpayRaw("/v1/plans?count=1", id, secret, { method: "GET" });
-        result.probe_normalized = {
-          status: probe.res.status,
-          error_code: probe.data?.error?.code || null,
-          error_description: probe.data?.error?.description || probe.data?.raw || null,
-        };
-        if (rawId !== id || rawSecret !== secret) {
-          const rawProbe = await razorpayRaw("/v1/plans?count=1", rawId || "", rawSecret || "", { method: "GET" });
-          result.probe_raw = { status: rawProbe.res.status };
-        }
-      }
-      return respond({ ok: true, diagnostics: result });
-    }
 
     const url = Deno.env.get("SUPABASE_URL")!;
     const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
