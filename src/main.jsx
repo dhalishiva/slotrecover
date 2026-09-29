@@ -51,6 +51,8 @@ function AuthScreen({ onDemo }) {
   const [mode, setMode] = useState('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [otp, setOtp] = useState('')
+  const [otpStep, setOtpStep] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
 
@@ -58,12 +60,42 @@ function AuthScreen({ onDemo }) {
     e.preventDefault()
     setBusy(true)
     setMsg('')
-    const { error } = mode === 'signin'
-      ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password })
+
+    if (otpStep) {
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: otp.trim(),
+        type: 'email',
+      })
+      setBusy(false)
+      if (error) setMsg(error.message)
+      return
+    }
+
+    if (mode === 'signin') {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      setBusy(false)
+      if (error) setMsg(error.message)
+      return
+    }
+
+    const { data, error } = await supabase.auth.signUp({ email, password })
     setBusy(false)
-    if (error) setMsg(error.message)
-    else if (mode === 'signup') setMsg('Check your email to finish signing up.')
+    if (error) {
+      setMsg(error.message)
+      return
+    }
+
+    if (data.session) return
+    setOtpStep(true)
+    setMsg('We sent a 6-digit verification code to your email.')
+  }
+
+  function switchMode() {
+    setMode(mode === 'signin' ? 'signup' : 'signin')
+    setOtpStep(false)
+    setOtp('')
+    setMsg('')
   }
 
   return <div className="auth-shell">
@@ -85,22 +117,55 @@ function AuthScreen({ onDemo }) {
       <form className="auth-box" onSubmit={submit}>
         <div className="mobile-brand"><Brand /></div>
         <p className="kicker">WELCOME</p>
-        <h2>{mode === 'signin' ? 'Sign in to your workspace' : 'Create your workspace'}</h2>
-        <p className="subtle">{mode === 'signin'
-          ? 'See what is confirmed, at risk, and already recovered.'
-          : 'Start with your first practice and service.'}</p>
-        <label>Email address</label>
-        <input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@business.com"/>
-        <label>Password</label>
-        <input required minLength={6} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"/>
-        <button className="primary wide" disabled={busy}>{busy ? 'Working…' : mode === 'signin' ? 'Sign in' : 'Create account'}</button>
+        <h2>{otpStep ? 'Verify your email' : mode === 'signin' ? 'Sign in to your workspace' : 'Create your workspace'}</h2>
+        <p className="subtle">{otpStep
+          ? `Enter the 6-digit code sent to ${email}.`
+          : mode === 'signin'
+            ? 'See what is confirmed, at risk, and already recovered.'
+            : 'Create your account, then verify your email with a one-time code.'}</p>
+
+        {!otpStep && <>
+          <label>Email address</label>
+          <input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@business.com"/>
+          <label>Password</label>
+          <input required minLength={6} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"/>
+        </>}
+
+        {otpStep && <>
+          <label>Verification code</label>
+          <input
+            required
+            autoFocus
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]{6}"
+            maxLength={6}
+            value={otp}
+            onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="123456"
+          />
+        </>}
+
+        <button className="primary wide" disabled={busy || (otpStep && otp.length !== 6)}>
+          {busy ? 'Working…' : otpStep ? 'Verify email' : mode === 'signin' ? 'Sign in' : 'Create account'}
+        </button>
+
         {msg && <div className="form-msg">{msg}</div>}
-        <div className="switch-auth">
-          {mode === 'signin' ? 'New here?' : 'Already have an account?'}
-          <button type="button" onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}>
-            {mode === 'signin' ? 'Create an account' : 'Sign in'}
-          </button>
-        </div>
+
+        {otpStep ? (
+          <div className="switch-auth">
+            Wrong email?
+            <button type="button" onClick={() => { setOtpStep(false); setOtp(''); setMsg('') }}>Go back</button>
+          </div>
+        ) : (
+          <div className="switch-auth">
+            {mode === 'signin' ? 'New here?' : 'Already have an account?'}
+            <button type="button" onClick={switchMode}>
+              {mode === 'signin' ? 'Create an account' : 'Sign in'}
+            </button>
+          </div>
+        )}
+
         <div className="or"><span>or</span></div>
         <button type="button" className="ghost wide" onClick={onDemo}>Explore demo workspace <ArrowUpRight size={16}/></button>
       </form>
