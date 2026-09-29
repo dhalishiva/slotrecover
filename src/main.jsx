@@ -746,6 +746,7 @@ function Dashboard({ session, demo, onExitDemo }) {
       <header className="topbar">
         <div className="top-left">
           <button className="menu" onClick={() => setMobileNav(true)}><Menu size={20}/></button>
+          <div className="top-brand"><LogoMark size={26}/><span>SlotRecover</span></div>
           <div className="breadcrumb">Workspace <ChevronRight size={14}/> <strong>{nav}</strong></div>
         </div>
         <div className="top-actions">
