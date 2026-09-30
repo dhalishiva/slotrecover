@@ -150,3 +150,33 @@ a.chip:hover{border-color:#b8bcff;color:var(--ink)}
 
 /* Honour the hidden attribute even on elements that set their own display */
 [hidden]{display:none!important}
+
+/* product showcase + tour */
+.hero{padding-bottom:150px}
+.showcase{margin-top:-110px;position:relative;z-index:2}
+.browser{margin:0;border-radius:16px;overflow:hidden;background:#fff;border:1px solid rgba(255,255,255,.14);box-shadow:0 40px 100px rgba(10,12,30,.35),0 0 0 1px rgba(20,24,40,.06)}
+.browser-bar{display:flex;align-items:center;gap:7px;height:38px;padding:0 14px;background:#f1f2f5;border-bottom:1px solid var(--line)}
+.browser-bar i{width:11px;height:11px;border-radius:50%;background:#d6d8de}
+.browser-bar i:nth-child(1){background:#ff6b6b}.browser-bar i:nth-child(2){background:#ffc14d}.browser-bar i:nth-child(3){background:#46d17f}
+.browser-bar span{margin-left:12px;font-size:12px;color:#8a8e97;background:#fff;border:1px solid var(--line);border-radius:7px;padding:3px 12px}
+.browser img,.tour-shot img{display:block;width:100%;height:auto}
+.showcase-note{text-align:center;color:var(--muted);font-size:14px;margin:16px 0 0}
+.tour .sub{margin-bottom:10px}
+.tour-row{display:grid;grid-template-columns:1fr 1.35fr;gap:56px;align-items:center;margin-top:72px}
+.tour-row.flip{grid-template-columns:1.35fr 1fr}
+.tour-row.flip .tour-text{order:2}
+.tour-text .h2{font-size:clamp(24px,2.6vw,32px)}
+.tour-text>p{color:var(--muted);font-size:17px}
+.tour-shot{margin:0}
+.tour-shot>img{border-radius:16px;border:1px solid var(--line);box-shadow:0 24px 60px rgba(20,24,40,.12)}
+.tour-shot>img.framed{border-radius:14px}
+.phone-row,.tour-row.flip.phone-row{grid-template-columns:1fr 1fr}
+.phone{width:min(300px,78%);margin:0 auto;border:10px solid #14161c;border-radius:40px;overflow:hidden;box-shadow:0 30px 70px rgba(20,24,40,.25);background:#14161c}
+.phone img{border-radius:30px}
+@media(max-width:900px){
+  .tour-row,.tour-row.flip,.phone-row,.tour-row.flip.phone-row{grid-template-columns:1fr;gap:26px;margin-top:56px}
+  .tour-row.flip .tour-text{order:0}
+  .hero{padding-bottom:110px}.showcase{margin-top:-80px}
+  .browser-bar{height:30px}.browser-bar span{display:none}
+}
+.tour-shot>img.cut{border:0;border-radius:0;box-shadow:none;filter:drop-shadow(0 22px 40px rgba(20,24,40,.16))}

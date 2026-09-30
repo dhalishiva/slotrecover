@@ -153,6 +153,53 @@ const heroCard = `
   <div class="hc-total"><span>Recovered this month</span><strong>$2,840</strong></div>
 </div>`
 
+
+// ---------- Product tour (real app screens, sample data) ----------
+const shot = (file, alt, w, h, cls = '', eager = false) =>
+  `<img src="/shots/${file}.webp" alt="${esc(alt)}" width="${w}" height="${h}" class="${cls}" ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">`
+
+const TOUR = [
+  { kicker: 'Booking', title: 'Book only times that are actually free',
+    text: 'SlotRecover shows every open time for the service and date, and how many of your team are free. If the time a client wants is taken, add them to the waitlist in one tap instead of losing them.',
+    ticks: ['Respects opening hours and each person’s services', 'Pick a specific staff member or anyone available', 'Waitlist in one tap when a time is full'],
+    img: shot('new-appointment', 'SlotRecover New appointment screen showing free and booked time slots with staff selection', 1200, 1197, 'cut') },
+  { kicker: 'Recovery', title: 'Cancelled? The slot refills itself',
+    text: 'When a client cancels or reschedules, the slot is offered to the best match on your waitlist with a 15-minute window. No reply, and it moves to the next person automatically.',
+    ticks: ['Matches service, time and preferred staff', 'Timed offers so slots don’t go cold', 'Recovered revenue is tracked for you'],
+    img: shot('recovery', 'SlotRecover recovery engine with the current waitlist and offer steps', 1400, 804) },
+  { kicker: 'Reminders', title: 'Nudge the no-replies on WhatsApp',
+    text: 'Clients who haven’t confirmed get a ready-written WhatsApp message with confirm, reschedule and cancel links. You review it and press send from your own WhatsApp.',
+    ticks: ['Personalised with service, staff and time', 'Your own note, like parking or deposit info', 'One tap from the appointment list'],
+    img: shot('whatsapp', 'SlotRecover WhatsApp reminder with confirm, reschedule and cancel links', 1100, 958, 'cut') },
+  { kicker: 'Messaging', title: 'See every message and every reply',
+    text: 'Confirmation emails, WhatsApp reminders and waitlist offers in one timeline, with who confirmed, who is still awaiting a reply and which slots were recovered.',
+    ticks: ['Filter by awaiting reply, waitlist offers or WhatsApp', 'Reply rate and confirmations at a glance', 'Spot problems like missing email addresses'],
+    img: shot('messaging', 'SlotRecover messaging timeline with confirmations, reminders and waitlist offers', 1400, 997) },
+  { kicker: 'On your phone', title: 'Runs your front desk from your pocket',
+    text: 'Install SlotRecover on iPhone or Android like an app. Get a notification when confirmations go out, and send a WhatsApp reminder straight from it.',
+    ticks: ['No app store needed', 'Push notifications for your team', 'Works on any phone, tablet or computer'],
+    img: `<div class="phone">${shot('mobile', 'SlotRecover dashboard on a phone', 560, 1212)}</div>`, phone: true },
+]
+
+const tourSection = `
+<section class="section tour" id="tour"><div class="wrap">
+  <p class="kicker">See it in action</p>
+  <h2>What SlotRecover does, screen by screen</h2>
+  <p class="sub">Real screens from the app. Names and numbers are sample data.</p>
+  ${TOUR.map((t, i) => `<div class="tour-row${i % 2 ? ' flip' : ''}${t.phone ? ' phone-row' : ''}">
+    <div class="tour-text"><p class="kicker">${esc(t.kicker)}</p><h3 class="h2">${esc(t.title)}</h3><p>${esc(t.text)}</p>
+      <ul class="ticks">${t.ticks.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
+    <figure class="tour-shot">${t.img}</figure>
+  </div>`).join('')}
+</div></section>`
+
+const showcase = `
+<section class="showcase"><div class="wrap">
+  <figure class="browser"><div class="browser-bar"><i></i><i></i><i></i><span>slotrecover.pro/app</span></div>
+  ${shot('dashboard', 'SlotRecover dashboard showing revenue recovered, recovery rate, upcoming appointments and recovery activity', 1600, 1000, '', true)}</figure>
+  <p class="showcase-note">Your dashboard: revenue recovered, what’s at risk, and today’s bookings. Sample data.</p>
+</div></section>`
+
 // ---------- Pages ----------
 function home() {
   const body = `
@@ -161,17 +208,19 @@ function home() {
     <p class="eyebrow">Appointment confirmations + waitlist recovery</p>
     <h1>Fill cancelled appointments automatically</h1>
     <p class="lead">${PRODUCT} confirms every booking, catches cancellations early, and instantly offers the empty slot to the right client on your waitlist. Less empty time, more revenue.</p>
-    <div class="hero-cta"><a class="btn btn-light btn-lg" href="/app?signup=1">Start ${TRIAL_DAYS}-day free trial</a><a class="btn btn-ghost btn-lg" href="#how">See how it works</a></div>
+    <div class="hero-cta"><a class="btn btn-light btn-lg" href="/app?signup=1">Start ${TRIAL_DAYS}-day free trial</a><a class="btn btn-ghost btn-lg" href="#tour">See it in action</a></div>
     <p class="hero-note">From ${priceTag()}/month · Nothing charged during the trial · Cancel any time</p>
   </div>
   ${heroCard}
 </div></section>
+${showcase}
 
 <section class="section" id="how"><div class="wrap">
   <p class="kicker">How it works</p>
   <h2>An empty slot is lost revenue. ${PRODUCT} tries to recover it.</h2>
   <div class="steps">${STEPS.map(([t, d], i) => `<div class="step"><span>0${i + 1}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join('')}</div>
 </div></section>
+${tourSection}
 
 <section class="section alt"><div class="wrap">
   <p class="kicker">Features</p>
