@@ -19,7 +19,9 @@ const write = (rel, content) => {
 
 const LOGO = `<svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7d84ff"/><stop offset="1" stop-color="#4a51dc"/></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#lg)"/><g fill="none" stroke="#fff" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round"><path d="M42 21.5c-2.4-3-6-4.5-10-4.5-6 0-10.5 3.6-10.5 8.3 0 4.8 4.2 6.8 10.5 8.2 6.3 1.4 10.5 3.4 10.5 8.2 0 4.7-4.5 8.3-10.5 8.3-4.4 0-8.2-1.8-10.6-5"/><path d="M17 40.5l4.4 4.6 4.9-4.2"/></g></svg>`
 
-const priceTag = (cls = '') => `<span class="price ${cls}" data-price>${PRICES.USD.symbol}${PRICES.USD.amount}</span>`
+const priceTag = (cls = '', term = 'amount') => `<span class="price ${cls}" data-price="${term}">${PRICES.USD.symbol}${PRICES.USD[term]}</span>`
+// Saving on a longer term versus paying monthly, from the USD prices we bill in.
+const saving = (term, months) => Math.round((1 - PRICES.USD[term] / (PRICES.USD.amount * months)) * 100)
 
 function layout({ route, title, description, body, jsonLd = [], ogType = 'website' }) {
   const url = SITE_URL + (route === '/' ? '/' : route)
@@ -95,8 +97,8 @@ window.SR_PRICES=${JSON.stringify(PRICES)};
   try{for(var i=0;i<localStorage.length;i++){if(/^sb-.*-auth-token$/.test(localStorage.key(i))){document.querySelectorAll('[data-app-link]').forEach(function(a){a.textContent='Open app'});break}}}catch(e){}
   // Local currency: saved choice, then location from /api/geo, then timezone guess.
   var P=window.SR_PRICES;
-  function fmt(c){var p=P[c]||P.USD;return p.symbol+p.amount.toLocaleString('en-US')}
-  function apply(c){if(!P[c])c='USD';document.querySelectorAll('[data-price]').forEach(function(el){el.textContent=fmt(c)});document.querySelectorAll('[data-currency]').forEach(function(el){el.textContent=P[c].label});document.querySelectorAll('[data-cur-btn]').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-cur-btn')===c)});document.documentElement.setAttribute('data-cur',c)}
+  function fmt(c,t){var p=P[c]||P.USD;return p.symbol+p[t||'amount'].toLocaleString('en-US')}
+  function apply(c){if(!P[c])c='USD';document.querySelectorAll('[data-price]').forEach(function(el){el.textContent=fmt(c,el.getAttribute('data-price'))});document.querySelectorAll('[data-currency]').forEach(function(el){el.textContent=P[c].label});document.querySelectorAll('[data-cur-btn]').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-cur-btn')===c)});document.documentElement.setAttribute('data-cur',c)}
   function guess(){try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'';if(tz==='Europe/London')return'GBP';if(/^Europe\\//.test(tz))return'EUR'}catch(e){}return'USD'}
   var saved=null;try{saved=localStorage.getItem('sr_currency')}catch(e){}
   apply(saved||guess());
@@ -206,14 +208,19 @@ function pricing() {
   <div class="plan">
     <div class="plan-head"><h2>${PRODUCT}</h2><p>For solo professionals and small teams</p></div>
     <div class="plan-price">${priceTag('big')}<span class="per">/ month · <span data-currency>USD</span></span></div>
-    <p class="plan-trial">${TRIAL_DAYS}-day free trial · then billed monthly · taxes extra where applicable</p>
+    <p class="plan-trial">${TRIAL_DAYS}-day free trial · then billed for your chosen term · taxes extra where applicable</p>
+    <div class="terms">
+      <div class="term"><span>Monthly</span>${priceTag()}<small>per month</small></div>
+      <div class="term"><span>6 months</span>${priceTag('', 'six')}<small>billed every 6 months</small><em>Save ${saving('six', 6)}%</em></div>
+      <div class="term"><span>Yearly</span>${priceTag('', 'year')}<small>billed yearly</small><em>Save ${saving('year', 12)}%</em></div>
+    </div>
     <a class="btn btn-dark btn-lg wide" href="/app?signup=1">Start free trial</a>
     <ul class="ticks">${included.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
   </div>
 </div></section>
 ${faqBlock(PRICING_FAQ)}
 ${ctaBand('Try it free for a week.')}`
-  return layout({ route: '/pricing', title: `Pricing · ${PRODUCT}`, description: `${PRODUCT} pricing: one monthly plan with everything included, shown in USD, EUR or GBP. ${TRIAL_DAYS}-day free trial, cancel any time.`, body, jsonLd: [appLd, faqLd(PRICING_FAQ), crumbs([['Home', '/'], ['Pricing', '/pricing']])] })
+  return layout({ route: '/pricing', title: `Pricing · ${PRODUCT}`, description: `${PRODUCT} pricing: one plan with everything included, billed monthly, every 6 months or yearly. Shown in USD, EUR or GBP. ${TRIAL_DAYS}-day free trial, cancel any time.`, body, jsonLd: [appLd, faqLd(PRICING_FAQ), crumbs([['Home', '/'], ['Pricing', '/pricing']])] })
 }
 
 function industriesIndex() {
