@@ -4,7 +4,6 @@ const EUR = new Set(['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR'
 
 export function currencyFor(country) {
   const c = (country || '').toUpperCase()
-  if (c === 'IN') return 'INR'
   if (c === 'GB' || c === 'GG' || c === 'JE' || c === 'IM') return 'GBP'
   if (EUR.has(c)) return 'EUR'
   return 'USD'

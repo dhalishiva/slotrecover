@@ -97,7 +97,7 @@ window.SR_PRICES=${JSON.stringify(PRICES)};
   var P=window.SR_PRICES;
   function fmt(c){var p=P[c]||P.USD;return p.symbol+p.amount.toLocaleString('en-US')}
   function apply(c){if(!P[c])c='USD';document.querySelectorAll('[data-price]').forEach(function(el){el.textContent=fmt(c)});document.querySelectorAll('[data-currency]').forEach(function(el){el.textContent=P[c].label});document.querySelectorAll('[data-cur-btn]').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-cur-btn')===c)});document.documentElement.setAttribute('data-cur',c)}
-  function guess(){try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'';if(/^Asia\\/(Kolkata|Calcutta)/.test(tz))return'INR';if(tz==='Europe/London')return'GBP';if(/^Europe\\//.test(tz))return'EUR'}catch(e){}return'USD'}
+  function guess(){try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'';if(tz==='Europe/London')return'GBP';if(/^Europe\\//.test(tz))return'EUR'}catch(e){}return'USD'}
   var saved=null;try{saved=localStorage.getItem('sr_currency')}catch(e){}
   apply(saved||guess());
   if(!saved){fetch('/api/geo').then(function(r){return r.ok?r.json():null}).then(function(d){if(d&&d.currency)apply(d.currency)}).catch(function(){})}
@@ -213,7 +213,7 @@ function pricing() {
 </div></section>
 ${faqBlock(PRICING_FAQ)}
 ${ctaBand('Try it free for a week.')}`
-  return layout({ route: '/pricing', title: `Pricing · ${PRODUCT}`, description: `${PRODUCT} pricing: one monthly plan with everything included, shown in USD, EUR, GBP or INR. ${TRIAL_DAYS}-day free trial, cancel any time.`, body, jsonLd: [appLd, faqLd(PRICING_FAQ), crumbs([['Home', '/'], ['Pricing', '/pricing']])] })
+  return layout({ route: '/pricing', title: `Pricing · ${PRODUCT}`, description: `${PRODUCT} pricing: one monthly plan with everything included, shown in USD, EUR or GBP. ${TRIAL_DAYS}-day free trial, cancel any time.`, body, jsonLd: [appLd, faqLd(PRICING_FAQ), crumbs([['Home', '/'], ['Pricing', '/pricing']])] })
 }
 
 function industriesIndex() {
