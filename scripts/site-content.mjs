@@ -6,11 +6,12 @@ export const SITE_URL = 'https://www.slotrecover.pro'
 export const PRODUCT = 'SlotRecover'
 export const COMPANY = 'Dhali Services'
 
-// Fixed regional price points (monthly). Placeholders until pricing is final.
+// Fixed regional price points: monthly, and totals for the 6-month and yearly terms.
+// Billing is in USD (live plans: $29, $165, $299); EUR/GBP are display prices.
 export const PRICES = {
-  USD: { amount: 29, symbol: '$', label: 'USD' },
-  EUR: { amount: 27, symbol: '€', label: 'EUR' },
-  GBP: { amount: 24, symbol: '£', label: 'GBP' },
+  USD: { amount: 29, six: 165, year: 299, symbol: '$', label: 'USD' },
+  EUR: { amount: 27, six: 155, year: 279, symbol: '€', label: 'EUR' },
+  GBP: { amount: 24, six: 135, year: 249, symbol: '£', label: 'GBP' },
 }
 export const TRIAL_DAYS = 7
 
@@ -41,6 +42,7 @@ export const HOME_FAQ = [
 
 export const PRICING_FAQ = [
   ['Why do I see prices in my currency?', 'We show prices in US dollars, euros or British pounds based on your location. Everywhere else, including India, sees US dollars. You can switch currency on this page.'],
+  ['Can I pay for 6 months or a year?', 'Yes. Choose monthly, 6 months or yearly when you start your trial. Longer terms cost less per month, and you’re billed for the whole term when the free trial ends.'],
   ['Is tax included?', 'Prices exclude VAT, GST or sales tax, which is added where it applies.'],
   ['What happens after the free trial?', `Your plan starts automatically when the ${TRIAL_DAYS}-day trial ends. Cancel before then from Settings and you won’t be charged.`],
   ['Can I cancel any time?', 'Yes. Cancel in Settings → Subscription. You keep access until the end of the period you’ve paid for.'],
