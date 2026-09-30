@@ -8,7 +8,6 @@ export function detectCurrency() {
     const guess = () => {
       try {
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''
-        if (/^Asia\/(Kolkata|Calcutta)/.test(tz)) return 'INR'
         if (tz === 'Europe/London') return 'GBP'
         if (/^Europe\//.test(tz)) return 'EUR'
       } catch {}

@@ -11,7 +11,6 @@ export const PRICES = {
   USD: { amount: 29, symbol: '$', label: 'USD' },
   EUR: { amount: 27, symbol: '€', label: 'EUR' },
   GBP: { amount: 24, symbol: '£', label: 'GBP' },
-  INR: { amount: 299, symbol: '₹', label: 'INR' },
 }
 export const TRIAL_DAYS = 7
 
@@ -41,7 +40,7 @@ export const HOME_FAQ = [
 ]
 
 export const PRICING_FAQ = [
-  ['Why do I see prices in my currency?', 'We show prices in US dollars, euros, British pounds or Indian rupees based on your location. You can switch currency on this page.'],
+  ['Why do I see prices in my currency?', 'We show prices in US dollars, euros or British pounds based on your location. Everywhere else, including India, sees US dollars. You can switch currency on this page.'],
   ['Is tax included?', 'Prices exclude VAT, GST or sales tax, which is added where it applies.'],
   ['What happens after the free trial?', `Your plan starts automatically when the ${TRIAL_DAYS}-day trial ends. Cancel before then from Settings and you won’t be charged.`],
   ['Can I cancel any time?', 'Yes. Cancel in Settings → Subscription. You keep access until the end of the period you’ve paid for.'],
