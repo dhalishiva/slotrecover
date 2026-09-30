@@ -10,7 +10,7 @@ import { supabase, supabaseConfigured } from './supabase'
 import { LegalPage, isLegalPath } from './legal'
 import { HelpCenter, HelpBubble } from './help'
 import { money, setMoneyCurrency, LogoMark } from './ui'
-import { hasAccess, startCheckout, fetchBillingStatus, accessUntil, detectCurrency } from './billingClient'
+import { hasAccess, startCheckout, fetchBillingStatus, accessUntil, detectCurrency, fetchPlans, planMonths, planTerm, notActivated } from './billingClient'
 import { SettingsPage } from './settings'
 import { AppointmentModal } from './booking'
 import { ReminderModal, fetchReminderAppointment, reminderSelect } from './whatsapp'
@@ -59,6 +59,8 @@ function AppContent() {
   const [demo, setDemo] = useState(!supabaseConfigured)
   const [billing, setBilling] = useState(null)
   const [billingLoading, setBillingLoading] = useState(false)
+  // null: use the saved skip choice; 'skipped': exploring without a plan; any other string: asked to activate, with that reason.
+  const [activation, setActivation] = useState(null)
 
   useEffect(() => {
     if (!supabase) { setLoading(false); return }
@@ -81,7 +83,7 @@ function AppContent() {
     }
     setBillingLoading(true)
     supabase.from('billing_accounts')
-      .select('status,trial_started_at,trial_ends_at,current_period_end,cancel_at_period_end,razorpay_subscription_id,authorization_verified_at,billing_plans(name,amount_paise,currency,period,trial_days)')
+      .select('status,trial_started_at,trial_ends_at,current_period_end,cancel_at_period_end,razorpay_subscription_id,authorization_verified_at,billing_plans(code,name,amount_paise,currency,period,interval_count,trial_days)')
       .eq('user_id', session.user.id)
       .single()
       .then(({ data }) => {
@@ -101,29 +103,46 @@ function AppContent() {
   if (recovery && session) return <SetNewPasswordScreen onDone={() => { setRecovery(false); window.history.replaceState({}, '', '/app') }} />
   if (loading || (recovery && !session && openedFromRecoveryLink) || (session && !demo && billingLoading)) return <div className="boot"><div className="spinner" />Loading workspace…</div>
   if (!session && !demo) return <AuthScreen onDemo={() => setDemo(true)} onRecoveryStart={() => setRecovery(true)} onRecoveryFailed={() => setRecovery(false)} />
-  if (session && !demo && billing && !hasAccess(billing)) {
-    return <BillingSetupScreen billing={billing} onReady={() => window.location.reload()} />
+  const locked = Boolean(session && !demo && billing && !hasAccess(billing))
+  const skipKey = 'sr_explore_' + (session?.user?.id || '')
+  let showActivation = typeof activation === 'string' && activation !== 'skipped'
+  if (activation === null) { try { showActivation = localStorage.getItem(skipKey) !== '1' } catch { showActivation = true } }
+  if (locked && showActivation) {
+    return <BillingSetupScreen billing={billing} reason={activation} onReady={() => window.location.reload()}
+      onSkip={() => { try { localStorage.setItem(skipKey, '1') } catch {} setActivation('skipped') }} />
   }
-  return <Dashboard session={session} demo={demo} onExitDemo={() => setDemo(false)} />
+  return <Dashboard session={session} demo={demo} onExitDemo={() => setDemo(false)}
+    billing={billing} locked={locked} onActivate={reason => setActivation(reason || '')} />
 }
 
-function BillingSetupScreen({ billing, onReady }) {
+function BillingSetupScreen({ billing, reason, onReady, onSkip }) {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [localCurrency, setLocalCurrency] = useState(null)
+  const current = Array.isArray(billing.billing_plans) ? billing.billing_plans[0] : billing.billing_plans
+  const [plans, setPlans] = useState(null)
+  const [planCode, setPlanCode] = useState(current?.code || '')
   useEffect(() => { detectCurrency().then(setLocalCurrency) }, [])
+  useEffect(() => {
+    fetchPlans(current?.currency || 'USD').then(list => {
+      setPlans(list)
+      if (!list.some(p => p.code === planCode) && list[0]) setPlanCode(list[0].code)
+    }).catch(() => setPlans([]))
+  }, [])
 
   async function startBilling() {
     setBusy(true); setMessage('')
-    const res = await startCheckout()
+    const res = await startCheckout(planCode)
     setBusy(false)
     if (res.ok) onReady()
     else if (!res.dismissed) setMessage(res.message)
   }
 
-  const trialEnd = new Date(billing.trial_ends_at)
+  // A first-time trial starts when they activate, so it's always the full length.
+  const fresh = notActivated(billing)
+  const plan = plans?.find(p => p.code === planCode) || current
+  const trialEnd = fresh ? new Date(Date.now() + (plan?.trial_days || 7) * 86400000) : new Date(billing.trial_ends_at)
   const daysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / 86400000))
-  const plan = Array.isArray(billing.billing_plans) ? billing.billing_plans[0] : billing.billing_plans
   const currency = plan?.currency || 'USD'
   const amount = (plan?.amount_paise || 0) / 100
   const formattedAmount = new Intl.NumberFormat('en-US', {
@@ -140,21 +159,36 @@ function BillingSetupScreen({ billing, onReady }) {
   }).format(0)
 
   const trialLeft = trialEnd.getTime() > Date.now()
-  const periodWord = plan?.period === 'yearly' ? 'year' : 'month'
+  const periodWord = planTerm(plan)
+  const monthly = plans?.find(p => planMonths(p) === 1)
+  const fmtPlan = (v, digits = 0) => new Intl.NumberFormat('en-US', { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: digits }).format(v)
   const legal = <>By continuing you agree to the <a href="/terms" target="_blank" rel="noreferrer">Terms of Service</a> and <a href="/refunds" target="_blank" rel="noreferrer">Refund &amp; Cancellation Policy</a>.</>
 
   return <div className="billing-setup-shell">
     <div className="billing-setup-card">
       <Brand />
       {trialLeft ? <>
-        <div className="billing-pill">{(plan?.trial_days || 7)}-DAY FREE TRIAL</div>
-        <h1>Start your SlotRecover trial.</h1>
-        <p>Authorize Razorpay now. Your subscription billing is scheduled to begin after the free trial ends.</p>
+        <div className="billing-pill">{reason ? 'ACTIVATION NEEDED' : (plan?.trial_days || 7) + '-DAY FREE TRIAL'}</div>
+        <h1>{reason ? 'Activate SlotRecover to continue.' : 'Start your SlotRecover trial.'}</h1>
+        <p>{reason ? reason + ' ' : ''}Pick a plan and authorize Razorpay. Your {plan?.trial_days || 7}-day free trial starts now, and billing begins after it ends.</p>
       </> : <>
         <div className="billing-pill">{billing.status === 'cancelled' ? 'SUBSCRIPTION CANCELLED' : 'TRIAL ENDED'}</div>
         <h1>Restart your SlotRecover subscription.</h1>
         <p>Your workspace and data are still here. Restart your plan to keep confirming appointments and recovering cancelled slots.</p>
       </>}
+      {plans && plans.length > 1 && <div className="plan-options" role="radiogroup" aria-label="Plan">
+        {plans.map(p => {
+          const months = planMonths(p)
+          const perMonth = p.amount_paise / 100 / months
+          const save = monthly && months > 1 ? Math.round((1 - perMonth / (monthly.amount_paise / 100)) * 100) : 0
+          return <button type="button" role="radio" aria-checked={p.code === planCode} key={p.code} className={'plan-option' + (p.code === planCode ? ' on' : '')} onClick={() => setPlanCode(p.code)}>
+            <span>{months === 1 ? 'Monthly' : months === 12 ? 'Yearly' : months + ' months'}</span>
+            <strong>{fmtPlan(p.amount_paise / 100)}</strong>
+            <small>{months === 1 ? 'per month' : fmtPlan(perMonth, 2) + ' / month'}</small>
+            {save > 0 && <em>Save {save}%</em>}
+          </button>
+        })}
+      </div>}
       <div className="billing-summary">
         {trialLeft && <div><span>Trial remaining</span><strong>{daysLeft} day{daysLeft === 1 ? '' : 's'}</strong></div>}
         <div><span>Plan</span><strong>{formattedAmount} / {periodWord}</strong></div>
@@ -169,6 +203,7 @@ function BillingSetupScreen({ billing, onReady }) {
         : <>You'll be charged {formattedAmount} today and every {periodWord} after that, plus applicable taxes, until you cancel in Settings. </>}{legal}</small>
       {localCurrency && localCurrency !== currency && <small className="currency-note">Billing in {localCurrency} is coming soon. For now your plan is charged in {currency}, and your bank converts it.</small>}
       {message && <div className="form-msg">{message}</div>}
+      <button type="button" className="text-btn signout-link" onClick={onSkip}>{reason === null ? 'Skip for now and explore the dashboard' : 'Back to the dashboard'}</button>
       <button type="button" className="text-btn signout-link" onClick={() => supabase.auth.signOut()}>Sign out</button>
     </div>
   </div>
@@ -552,7 +587,7 @@ function Brand() {
   return <div className="brand"><LogoMark size={31}/>SlotRecover</div>
 }
 
-function Dashboard({ session, demo, onExitDemo }) {
+function Dashboard({ session, demo, onExitDemo, billing, locked, onActivate }) {
   const [nav, setNav] = useState('Overview')
   const [mobileNav, setMobileNav] = useState(false)
   const [practiceName, setPracticeName] = useState(demo ? 'Atelier No. 7' : '')
@@ -599,7 +634,7 @@ function Dashboard({ session, demo, onExitDemo }) {
     const id = new URLSearchParams(window.location.search).get('remind')
     if (!id) return
     window.history.replaceState({}, '', window.location.pathname)
-    fetchReminderAppointment(id).then(a => a && setReminder(a)).catch(() => notify('Appointment not found'))
+    fetchReminderAppointment(id).then(a => a && remind(a)).catch(() => notify('Appointment not found'))
   }, [loaded, practice, demo])
 
   function notify(message) {
@@ -714,6 +749,10 @@ function Dashboard({ session, demo, onExitDemo }) {
     else onExitDemo()
   }
 
+  // Setup (services, staff, settings) is open to everyone; booking needs a trial or plan.
+  const newAppointment = () => locked ? onActivate('Adding appointments needs an active trial or plan.') : setModal('appointment')
+  const remind = demo ? null : a => locked ? onActivate('Sending reminders needs an active trial or plan.') : setReminder(a)
+
   const navItems = [
     ['Overview', LayoutDashboard], ['Appointments', CalendarDays], ['Recovery', WandSparkles],
     ['Clients', UsersRound], ['Messaging', MessageCircleMore]
@@ -756,15 +795,17 @@ function Dashboard({ session, demo, onExitDemo }) {
         </div>
       </header>
 
-      {!demo && <BillingBanner session={session} onOpenSettings={() => setNav('Settings')} />}
+      {!demo && (locked
+        ? <ActivateBanner billing={billing} onActivate={() => onActivate('')} />
+        : <BillingBanner session={session} onOpenSettings={() => setNav('Settings')} />)}
       {!loaded ? <div className="boot inline"><div className="spinner" />Loading your workspace…</div> :
         needsSetup && !demo ? <Onboarding session={session} onDone={loadLive}/> :
-        nav === 'Overview' ? <Overview data={data} busy={busy} refresh={loadLive} demo={demo} onNew={() => setModal('appointment')} onRemind={demo ? null : a => setReminder(a.raw)}/> :
-        nav === 'Appointments' ? <Appointments appointments={data.appointments} onNew={() => setModal('appointment')} onRemind={demo ? null : a => setReminder(a.raw)}/> :
-        nav === 'Recovery' ? <Recovery waitlist={data.waitlist} onNew={() => setModal('appointment')}/> :
+        nav === 'Overview' ? <Overview data={data} busy={busy} refresh={loadLive} demo={demo} onNew={newAppointment} onRemind={remind && (a => remind(a.raw))}/> :
+        nav === 'Appointments' ? <Appointments appointments={data.appointments} onNew={newAppointment} onRemind={remind && (a => remind(a.raw))}/> :
+        nav === 'Recovery' ? <Recovery waitlist={data.waitlist} onNew={newAppointment}/> :
         nav === 'Clients' ? <EmptyPanel title="Client intelligence" text="Client history, confirmation behavior, and waitlist preferences will live here." icon={UsersRound}/> :
-        nav === 'Messaging' ? <MessagingPage practice={practice} demo={demo} refreshKey={msgKey} onRemind={demo ? null : a => setReminder(a)}/> :
-        <SettingsPage practice={practice} demo={demo} notify={notify} onChanged={loadLive}/>
+        nav === 'Messaging' ? <MessagingPage practice={practice} demo={demo} refreshKey={msgKey} onRemind={remind}/> :
+        <SettingsPage practice={practice} demo={demo} notify={notify} onChanged={loadLive} onActivate={() => onActivate('')}/>
       }
     </main>
 
@@ -774,6 +815,19 @@ function Dashboard({ session, demo, onExitDemo }) {
     {showInstall && <InstallModal onClose={() => setShowInstall(false)}/>}
     {reminder && <ReminderModal appointment={reminder} practice={practice} onClose={() => setReminder(null)} onSent={() => setMsgKey(k => k + 1)}/>}
     {toast && <div className="toast">{toast}</div>}
+  </div>
+}
+
+function ActivateBanner({ billing, onActivate }) {
+  const fresh = notActivated(billing)
+  return <div className="billing-banner">
+    <div>
+      <strong>{fresh ? 'You’re exploring SlotRecover' : billing.status === 'past_due' ? 'Payment failed' : 'Your plan isn’t active'}</strong>
+      <span>{fresh
+        ? 'Set up services, staff and hours as much as you like. Start your free trial when you’re ready to add appointments.'
+        : 'Your data is safe. Activate a plan to add appointments and send reminders again.'}</span>
+    </div>
+    <button className="primary" onClick={onActivate}>{fresh ? 'Start free trial' : 'Activate plan'}</button>
   </div>
 }
 

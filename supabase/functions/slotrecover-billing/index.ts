@@ -115,22 +115,40 @@ Deno.serve(async (req) => {
     }
 
     if (action === "create_subscription") {
-      // Prefer a plan in the visitor's currency when one is active and no live subscription exists yet.
+      const planFields = "id,code,name,amount_paise,currency,period,interval_count,trial_days,razorpay_plan_id,test_mode,plan_group";
+      // Plans can change until a subscription has been authorized.
+      const canSwitch = !billing.razorpay_subscription_id || ["authorization_pending", "cancelled", "expired", "halted"].includes(billing.status);
+      const planCode = String(body?.plan_code || "");
       const wanted = String(body?.currency || "").toUpperCase();
-      const canSwitch = !billing.razorpay_subscription_id || ["cancelled", "expired", "halted"].includes(billing.status);
-      if (wanted && canSwitch && wanted !== billing.billing_plans?.currency) {
-        const { data: regional } = await admin
-          .from("billing_plans")
-          .select("id,code,name,amount_paise,currency,period,interval_count,trial_days,razorpay_plan_id,test_mode,plan_group")
-          .eq("plan_group", billing.billing_plans?.plan_group || "standard")
-          .eq("currency", wanted)
-          .eq("active", true)
-          .maybeSingle();
-        if (regional) {
-          await admin.from("billing_accounts").update({ plan_id: regional.id, updated_at: new Date().toISOString() }).eq("user_id", user.id);
-          billing.plan_id = regional.id;
-          billing.billing_plans = regional;
-        }
+      let chosen = null;
+      if (canSwitch && planCode && planCode !== billing.billing_plans?.code) {
+        // The plan the user picked (monthly, 6 months or yearly).
+        const { data } = await admin.from("billing_plans").select(planFields)
+          .eq("code", planCode).eq("active", true).eq("plan_group", billing.billing_plans?.plan_group || "standard").maybeSingle();
+        chosen = data;
+      } else if (canSwitch && !planCode && wanted && wanted !== billing.billing_plans?.currency) {
+        // Otherwise prefer the same term in the visitor's currency when one is active.
+        const { data } = await admin.from("billing_plans").select(planFields)
+          .eq("plan_group", billing.billing_plans?.plan_group || "standard").eq("currency", wanted)
+          .eq("period", billing.billing_plans?.period).eq("interval_count", billing.billing_plans?.interval_count)
+          .eq("active", true).maybeSingle();
+        chosen = data;
+      }
+      if (chosen) {
+        await admin.from("billing_accounts").update({ plan_id: chosen.id, updated_at: new Date().toISOString() }).eq("user_id", user.id);
+        billing.plan_id = chosen.id;
+        billing.billing_plans = chosen;
+      }
+
+      // Users can explore before activating, so a first-time trial starts when they activate.
+      if (billing.status === "trialing" && !billing.razorpay_subscription_id && !billing.authorization_verified_at) {
+        const now = new Date();
+        const trialEnds = new Date(now.getTime() + (billing.billing_plans?.trial_days || 0) * 86400000);
+        await admin.from("billing_accounts")
+          .update({ trial_started_at: now.toISOString(), trial_ends_at: trialEnds.toISOString(), updated_at: now.toISOString() })
+          .eq("user_id", user.id);
+        billing.trial_started_at = now.toISOString();
+        billing.trial_ends_at = trialEnds.toISOString();
       }
 
       let razorpayPlanId = billing.billing_plans?.razorpay_plan_id;
@@ -160,14 +178,16 @@ Deno.serve(async (req) => {
 
       // A cancelled/expired/halted subscription cannot be reused; start a new one.
       const restarting = ["cancelled", "expired", "halted"].includes(billing.status);
-      let subscriptionId = restarting ? null : billing.razorpay_subscription_id;
+      // A subscription left pending on another plan can't be reused either.
+      let subscriptionId = restarting || chosen ? null : billing.razorpay_subscription_id;
       const trialEndMs = new Date(billing.trial_ends_at).getTime();
       const trialRemaining = trialEndMs > Date.now() + 10 * 60 * 1000;
 
       if (!subscriptionId) {
         const payload: Record<string, unknown> = {
           plan_id: razorpayPlanId,
-          total_count: billing.billing_plans.period === "yearly" ? 10 : 120,
+          // About 10 years of renewals, whatever the term length.
+          total_count: Math.ceil(120 / ((billing.billing_plans.period === "yearly" ? 12 : 1) * (billing.billing_plans.interval_count || 1))),
           quantity: 1,
           customer_notify: 0,
         };
