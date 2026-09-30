@@ -3,7 +3,7 @@ import { Building2, Clock3, CreditCard, Download, KeyRound, MessageSquareText, P
 import { InstallModal, NotificationsControl, useInstallState } from './appInstall'
 import { supabase } from './supabase'
 import { Field, Modal, money } from './ui'
-import { accessUntil, cancelSubscription, fetchBillingStatus, startCheckout } from './billingClient'
+import { accessUntil, cancelSubscription, fetchBillingStatus, notActivated, planTerm, startCheckout } from './billingClient'
 
 const DAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']]
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF', 'SEK', 'NOK', 'DKK', 'PLN', 'INR']
@@ -12,7 +12,7 @@ const timezones = (() => { try { return Intl.supportedValuesOf('timeZone') } cat
 const hhmm = t => (t || '').slice(0, 5)
 const fmtDate = d => d ? new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
 
-export function SettingsPage({ practice, demo, notify, onChanged }) {
+export function SettingsPage({ practice, demo, notify, onChanged, onActivate }) {
   const [rev, setRev] = useState(0)
   const changedAll = () => { setRev(r => r + 1); onChanged() }
   if (demo) {
@@ -28,7 +28,7 @@ export function SettingsPage({ practice, demo, notify, onChanged }) {
     <StaffSection practice={practice} notify={notify} onChanged={changedAll} rev={rev}/>
     <ClientMessageSection practice={practice} notify={notify} onChanged={onChanged}/>
     <AppSection practice={practice} notify={notify}/>
-    <BillingSection notify={notify}/>
+    <BillingSection notify={notify} onActivate={onActivate}/>
   </div>
 }
 
@@ -157,7 +157,7 @@ function ServicesSection({ practice, notify, onChanged }) {
   </Section>
 }
 
-function BillingSection({ notify }) {
+function BillingSection({ notify, onActivate }) {
   const [billing, setBilling] = useState(null)
   const [error, setError] = useState('')
   const [confirming, setConfirming] = useState(false)
@@ -190,21 +190,24 @@ function BillingSection({ notify }) {
   if (!billing) return <Section icon={CreditCard} title="Subscription" text="Your SlotRecover plan and billing.">{error ? <div className="form-msg">{error}</div> : <div className="spinner"/>}</Section>
 
   const plan = Array.isArray(billing.billing_plans) ? billing.billing_plans[0] : billing.billing_plans
-  const price = plan ? money(plan.amount_paise / 100, plan.currency) + ' / ' + (plan.period === 'yearly' ? 'year' : 'month') : '—'
-  const inTrial = new Date(billing.trial_ends_at).getTime() > Date.now()
+  const price = plan ? money(plan.amount_paise / 100, plan.currency) + ' / ' + planTerm(plan) : '—'
+  const fresh = notActivated(billing)
+  const inTrial = !fresh && new Date(billing.trial_ends_at).getTime() > Date.now()
   const until = accessUntil(billing)
   const cancelled = billing.status === 'cancelled'
   const endingSoon = billing.cancel_at_period_end && !cancelled
   const canCancel = billing.razorpay_subscription_id && ['authenticated', 'active', 'authorization_pending', 'past_due'].includes(billing.status) && !endingSoon
 
-  const statusLabel = cancelled ? 'Cancelled' : endingSoon ? 'Cancels at period end' : inTrial ? 'Free trial' : billing.status === 'active' ? 'Active' : billing.status === 'past_due' ? 'Payment failed' : billing.status.replace(/_/g, ' ')
-  const statusTone = cancelled || billing.status === 'past_due' ? 'danger' : endingSoon ? 'wait' : 'ok'
+  const statusLabel = fresh ? 'Not activated' : cancelled ? 'Cancelled' : endingSoon ? 'Cancels at period end' : inTrial ? 'Free trial' : billing.status === 'active' ? 'Active' : billing.status === 'past_due' ? 'Payment failed' : billing.status.replace(/_/g, ' ')
+  const statusTone = cancelled || billing.status === 'past_due' ? 'danger' : endingSoon || fresh ? 'wait' : 'ok'
 
   return <Section icon={CreditCard} title="Subscription" text="Billed by Dhali Services through Razorpay.">
     <div className="billing-grid">
       <div><span>Plan</span><strong>{plan?.name || '—'}</strong><small>{price}</small></div>
       <div><span>Status</span><strong><span className={'status ' + statusTone}>{statusLabel}</span></strong></div>
-      {cancelled || endingSoon
+      {fresh
+        ? <div><span>Free trial</span><strong>{plan?.trial_days || 7} days</strong><small>Starts when you activate</small></div>
+        : cancelled || endingSoon
         ? <div><span>Access until</span><strong>{fmtDate(until)}</strong><small>No further charges</small></div>
         : inTrial
           ? <div><span>Trial ends</span><strong>{fmtDate(billing.trial_ends_at)}</strong><small>First charge on this date</small></div>
@@ -214,6 +217,7 @@ function BillingSection({ notify }) {
     <div className="settings-actions split">
       <a className="text-link" href="/refunds" target="_blank" rel="noreferrer">Refund & Cancellation Policy</a>
       {canCancel && <button type="button" className="danger-btn" onClick={() => setConfirming(true)}>Cancel subscription</button>}
+      {fresh && onActivate && <button type="button" className="primary" onClick={onActivate}>Start free trial</button>}
       {cancelled && <button type="button" className="primary" disabled={busy} onClick={restart}>{busy ? 'Opening Razorpay…' : 'Restart subscription'}</button>}
       {endingSoon && <span className="settings-note">Changed your mind? Email billing support to keep your plan.</span>}
     </div>

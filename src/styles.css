@@ -83,6 +83,13 @@
 .billing-setup-card h1{font:800 30px Manrope;margin:14px 0 10px}
 .billing-setup-card>p{font-size:13px;line-height:1.65;color:#747984;margin:0 0 20px}
 .billing-summary{border:1px solid #eceef2;border-radius:14px;overflow:hidden;margin:18px 0}
+.plan-options{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0 0}
+.plan-option{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;border:1px solid #e3e5e9;border-radius:14px;background:#fff;padding:13px 13px 12px;cursor:pointer;font:inherit;color:inherit}
+.plan-option span{font-size:11px;font-weight:700;color:#5f6470}
+.plan-option strong{font:800 20px Manrope;color:#17191e}
+.plan-option small{font-size:10px;color:#858a93}
+.plan-option em{position:absolute;top:-9px;right:10px;font-style:normal;font-size:9px;font-weight:800;background:#e7f6ec;color:#1d7a43;border-radius:999px;padding:3px 7px}
+.plan-option.on{border-color:#17191e;box-shadow:0 0 0 1px #17191e}
 .billing-summary>div{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 15px;border-top:1px solid #f0f1f3}
 .billing-summary>div:first-child{border-top:0}
 .billing-summary span{font-size:11px;color:#858a93}
@@ -91,6 +98,8 @@
 @media(max-width:560px){
   .billing-setup-card{padding:24px 16px}
   .billing-setup-card h1{font-size:25px}
+  .plan-options{grid-template-columns:1fr}
+  .plan-option{flex-direction:row;align-items:baseline;gap:8px;flex-wrap:wrap}
 }
 
 /* ---- Auth consent & links ---- */

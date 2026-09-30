@@ -25,6 +25,28 @@ export function accessUntil(billing) {
   return dates.length ? new Date(Math.max(...dates)) : null
 }
 
+// Months covered by one billing cycle, and how to say it ("month", "6 months", "year").
+export function planMonths(plan) {
+  return (plan?.period === 'yearly' ? 12 : 1) * (plan?.interval_count || 1)
+}
+export function planTerm(plan) {
+  const m = planMonths(plan)
+  return m === 12 ? 'year' : m === 1 ? 'month' : m + ' months'
+}
+
+// Signed up but never started a trial or plan: they can explore, not book.
+export function notActivated(billing) {
+  return Boolean(billing && billing.status === 'trialing' && !billing.razorpay_subscription_id && !billing.authorization_verified_at)
+}
+
+export async function fetchPlans(currency) {
+  const { data, error } = await supabase.from('billing_plans')
+    .select('code,name,amount_paise,currency,period,interval_count,trial_days')
+    .eq('active', true).eq('test_mode', false).eq('plan_group', 'standard').eq('currency', currency)
+  if (error) throw error
+  return (data || []).sort((a, b) => planMonths(a) - planMonths(b))
+}
+
 export function hasAccess(billing) {
   if (!billing) return true
   if (['authenticated', 'active'].includes(billing.status)) return true
@@ -48,9 +70,9 @@ function loadRazorpay() {
 
 // Creates (or reuses) the Razorpay subscription, opens Checkout and verifies it.
 // Resolves to { ok: true } or { ok: false, message }, or { ok: false, dismissed: true }.
-export async function startCheckout() {
+export async function startCheckout(planCode) {
   const currency = await detectCurrency()
-  const { data, error } = await supabase.functions.invoke('slotrecover-billing', { body: { action: 'create_subscription', currency } })
+  const { data, error } = await supabase.functions.invoke('slotrecover-billing', { body: { action: 'create_subscription', currency, plan_code: planCode || undefined } })
   if (error || data?.error) return { ok: false, message: await invokeError(error, data, 'Unable to start Razorpay.') }
   if (!(await loadRazorpay())) return { ok: false, message: 'Unable to load Razorpay Checkout.' }
 
