@@ -200,6 +200,45 @@ const showcase = `
   <p class="showcase-note">Your dashboard: revenue recovered, what’s at risk, and today’s bookings. Sample data.</p>
 </div></section>`
 
+
+// ---------- Trust + founder (only claims we can stand behind) ----------
+const TRUST = [
+  ['trial', `${TRIAL_DAYS}-day free trial`],
+  ['cancel', 'Cancel any time'],
+  ['lock', 'Encrypted, isolated data'],
+  ['shield', 'GDPR-ready, DPA included'],
+  ['phone', 'Works on any phone'],
+]
+const trustIcon = {
+  trial: '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>',
+  cancel: '<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  shield: '<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/>',
+  phone: '<rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/>',
+}
+const trustStrip = `
+<section class="trust"><div class="wrap"><ul class="trust-list">${TRUST.map(([k, t]) => `<li><svg viewBox="0 0 24 24" aria-hidden="true">${trustIcon[k]}</svg>${esc(t)}</li>`).join('')}</ul></div></section>`
+
+const founderSection = `
+<section class="section"><div class="wrap founder-grid">
+  <div class="founder-card">
+    <div class="founder-head"><div class="founder-avatar" aria-hidden="true">S</div><div><strong>Shiva</strong><span>Founder, ${PRODUCT}</span></div></div>
+    <p>“I build software for large companies by day, and kept hearing the same thing from small business owners: the bookings are fine, it’s the empty slots that hurt. ${PRODUCT} is my answer to that. It’s a small, focused product, and I read every message you send.”</p>
+    <a class="founder-link" href="/contact">Talk to the founder →</a>
+  </div>
+  <div class="founding">
+    <p class="kicker">Founding members</p>
+    <h2>Join early, keep your price</h2>
+    <p class="sub">${PRODUCT} is new. Businesses that join now are founding members:</p>
+    <ul class="ticks">
+      <li>Your launch price stays the same for as long as you stay subscribed</li>
+      <li>Direct line to the founder for setup help and questions</li>
+      <li>A real say in what gets built next</li>
+    </ul>
+    <a class="btn btn-dark btn-lg" href="/app?signup=1">Become a founding member</a>
+  </div>
+</div></section>`
+
 // ---------- Pages ----------
 function home() {
   const body = `
@@ -214,6 +253,7 @@ function home() {
   ${heroCard}
 </div></section>
 ${showcase}
+${trustStrip}
 
 <section class="section" id="how"><div class="wrap">
   <p class="kicker">How it works</p>
@@ -235,6 +275,7 @@ ${tourSection}
   <div class="chips">${INDUSTRIES.map(i => `<a class="chip" href="/industries/${i.slug}">${esc(i.short)}</a>`).join('')}</div>
 </div></section>
 
+${founderSection}
 <section class="section alt"><div class="wrap price-teaser">
   <div><p class="kicker">Pricing</p><h2>One simple plan</h2><p class="sub">Everything included, for your whole team. Shown in your local currency.</p></div>
   <div class="price-box">${priceTag('big')}<span class="per">/ month</span><a class="btn btn-dark" href="/pricing">See pricing</a></div>

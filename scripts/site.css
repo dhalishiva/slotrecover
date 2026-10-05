@@ -180,3 +180,22 @@ a.chip:hover{border-color:#b8bcff;color:var(--ink)}
   .browser-bar{height:30px}.browser-bar span{display:none}
 }
 .tour-shot>img.cut{border:0;border-radius:0;box-shadow:none;filter:drop-shadow(0 22px 40px rgba(20,24,40,.16))}
+
+/* trust strip */
+.trust{padding:34px 0 8px}
+.trust-list{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;justify-content:center;gap:12px 30px}
+.trust-list li{display:flex;align-items:center;gap:9px;font-weight:700;font-size:14px;color:#3b3f47}
+.trust-list svg{width:20px;height:20px;fill:none;stroke:var(--violet);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* founder + founding members */
+.founder-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:stretch}
+.founder-card{background:linear-gradient(160deg,#11141c,#1b1f2c);color:#e6e8ef;border-radius:22px;padding:34px;display:flex;flex-direction:column;gap:18px}
+.founder-head{display:flex;align-items:center;gap:14px}
+.founder-avatar{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;font:800 22px Manrope,sans-serif;color:#fff;background:linear-gradient(135deg,#7d84ff,#4a51dc)}
+.founder-head strong{display:block;font-size:17px;color:#fff}.founder-head span{font-size:13px;color:#9aa0ae}
+.founder-card p{font-size:18px;line-height:1.6;margin:0;color:#d4d7e0}
+.founder-link{margin-top:auto;color:#b3b7ff;font-weight:700;text-decoration:none}
+.founder-link:hover{color:#fff}
+.founding{border:1px solid var(--line);border-radius:22px;padding:34px;background:#fff}
+.founding .ticks{margin:6px 0 24px}
+@media(max-width:900px){.founder-grid{grid-template-columns:1fr}.founder-card,.founding{padding:26px}}
