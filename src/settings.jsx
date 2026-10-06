@@ -3,7 +3,7 @@ import { Building2, Clock3, CreditCard, Download, KeyRound, MessageSquareText, P
 import { InstallModal, NotificationsControl, useInstallState } from './appInstall'
 import { supabase } from './supabase'
 import { Field, Modal, money } from './ui'
-import { accessUntil, cancelSubscription, fetchBillingStatus, notActivated, planTerm, startCheckout } from './billingClient'
+import { accessUntil, cancelSubscription, fetchBillingStatus, onFreeTrial, freeTrialActive, planTerm, startCheckout, FREE_RECOVERY_LIMIT } from './billingClient'
 
 const DAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']]
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF', 'SEK', 'NOK', 'DKK', 'PLN', 'INR']
@@ -191,22 +191,23 @@ function BillingSection({ notify, onActivate }) {
 
   const plan = Array.isArray(billing.billing_plans) ? billing.billing_plans[0] : billing.billing_plans
   const price = plan ? money(plan.amount_paise / 100, plan.currency) + ' / ' + planTerm(plan) : '—'
-  const fresh = notActivated(billing)
+  const fresh = onFreeTrial(billing)
+  const freeActive = freeTrialActive(billing)
   const inTrial = !fresh && new Date(billing.trial_ends_at).getTime() > Date.now()
   const until = accessUntil(billing)
   const cancelled = billing.status === 'cancelled'
   const endingSoon = billing.cancel_at_period_end && !cancelled
-  const canCancel = billing.razorpay_subscription_id && ['authenticated', 'active', 'authorization_pending', 'past_due'].includes(billing.status) && !endingSoon
+  const canCancel = !fresh && billing.razorpay_subscription_id && ['authenticated', 'active', 'authorization_pending', 'past_due'].includes(billing.status) && !endingSoon
 
-  const statusLabel = fresh ? 'Not activated' : cancelled ? 'Cancelled' : endingSoon ? 'Cancels at period end' : inTrial ? 'Free trial' : billing.status === 'active' ? 'Active' : billing.status === 'past_due' ? 'Payment failed' : billing.status.replace(/_/g, ' ')
-  const statusTone = cancelled || billing.status === 'past_due' ? 'danger' : endingSoon || fresh ? 'wait' : 'ok'
+  const statusLabel = fresh ? (freeActive ? 'Free trial' : 'Trial ended') : cancelled ? 'Cancelled' : endingSoon ? 'Cancels at period end' : inTrial ? 'Free trial' : billing.status === 'active' ? 'Active' : billing.status === 'past_due' ? 'Payment failed' : billing.status.replace(/_/g, ' ')
+  const statusTone = cancelled || billing.status === 'past_due' || (fresh && !freeActive) ? 'danger' : endingSoon || fresh ? 'wait' : 'ok'
 
-  return <Section icon={CreditCard} title="Subscription" text="Billed by Dhali Services through Razorpay.">
+  return <Section icon={CreditCard} title="Subscription" text="Payments are made to Shiva Dhali Services, through Razorpay.">
     <div className="billing-grid">
       <div><span>Plan</span><strong>{plan?.name || '—'}</strong><small>{price}</small></div>
       <div><span>Status</span><strong><span className={'status ' + statusTone}>{statusLabel}</span></strong></div>
       {fresh
-        ? <div><span>Free trial</span><strong>{plan?.trial_days || 7} days</strong><small>Starts when you activate</small></div>
+        ? <div><span>{freeActive ? 'Free trial ends' : 'Free trial ended'}</span><strong>{fmtDate(billing.trial_ends_at)}</strong><small>No card needed · {FREE_RECOVERY_LIMIT} recovered slot included</small></div>
         : cancelled || endingSoon
         ? <div><span>Access until</span><strong>{fmtDate(until)}</strong><small>No further charges</small></div>
         : inTrial
@@ -217,7 +218,7 @@ function BillingSection({ notify, onActivate }) {
     <div className="settings-actions split">
       <a className="text-link" href="/refunds" target="_blank" rel="noreferrer">Refund & Cancellation Policy</a>
       {canCancel && <button type="button" className="danger-btn" onClick={() => setConfirming(true)}>Cancel subscription</button>}
-      {fresh && onActivate && <button type="button" className="primary" onClick={onActivate}>Start free trial</button>}
+      {fresh && onActivate && <button type="button" className="primary" onClick={onActivate}>Upgrade</button>}
       {cancelled && <button type="button" className="primary" disabled={busy} onClick={restart}>{busy ? 'Opening Razorpay…' : 'Restart subscription'}</button>}
       {endingSoon && <span className="settings-note">Changed your mind? Email billing support to keep your plan.</span>}
     </div>

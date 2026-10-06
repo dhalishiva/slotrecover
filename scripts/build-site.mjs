@@ -142,7 +142,7 @@ const crumbs = items => ({ '@context': 'https://schema.org', '@type': 'Breadcrum
 
 const ctaBand = (text = 'Stop losing revenue to empty slots.') => `
 <section class="cta-band"><div class="wrap cta-in">
-  <div><h2>${esc(text)}</h2><p>${TRIAL_DAYS}-day free trial. Cancel any time.</p></div>
+  <div><h2>${esc(text)}</h2><p>${TRIAL_DAYS}-day free trial. No card needed.</p></div>
   <a class="btn btn-light btn-lg" href="/app?signup=1">Start free trial</a>
 </div></section>`
 
@@ -210,7 +210,7 @@ function home() {
     <h1>Fill cancelled appointments automatically</h1>
     <p class="lead">${PRODUCT} confirms every booking, catches cancellations early, and instantly offers the empty slot to the right client on your waitlist. Less empty time, more revenue.</p>
     <div class="hero-cta"><a class="btn btn-light btn-lg" href="/app?signup=1">Start ${TRIAL_DAYS}-day free trial</a><a class="btn btn-ghost btn-lg" href="#tour">See it in action</a></div>
-    <p class="hero-note">From ${priceTag()}/month · Nothing charged during the trial · Cancel any time</p>
+    <p class="hero-note">${TRIAL_DAYS}-day free trial, no card needed · Then from ${priceTag()}/month · Cancel any time</p>
   </div>
   ${heroCard}
 </div></section>
@@ -242,7 +242,7 @@ ${tourSection}
 </div></section>
 ${faqBlock(HOME_FAQ)}
 ${ctaBand()}`
-  return layout({ route: '/', title: `No-Show & Cancellation Recovery Software | ${PRODUCT}`, description: `${PRODUCT} confirms appointments automatically and refills cancelled slots from your waitlist. Reduce no-shows and recover lost revenue. ${TRIAL_DAYS}-day free trial.`, body, jsonLd: [orgLd, appLd, faqLd(HOME_FAQ)] })
+  return layout({ route: '/', title: `No-Show & Cancellation Recovery Software | ${PRODUCT}`, description: `${PRODUCT} confirms appointments automatically and refills cancelled slots from your waitlist. Reduce no-shows and recover lost revenue. ${TRIAL_DAYS}-day free trial, no card needed.`, body, jsonLd: [orgLd, appLd, faqLd(HOME_FAQ)] })
 }
 
 function pricing() {
@@ -258,7 +258,7 @@ function pricing() {
   <div class="plan">
     <div class="plan-head"><h2>${PRODUCT}</h2><p>For solo professionals and small teams</p></div>
     <div class="plan-price">${priceTag('big')}<span class="per">/ month · <span data-currency>USD</span></span></div>
-    <p class="plan-trial">${TRIAL_DAYS}-day free trial · then billed for your chosen term · taxes extra where applicable</p>
+    <p class="plan-trial">${TRIAL_DAYS}-day free trial, no card needed (includes 1 recovered slot) · upgrade any time · taxes extra where applicable · payments to ${COMPANY}</p>
     <div class="terms">
       <div class="term"><span>Monthly</span>${priceTag()}<small>per month</small></div>
       <div class="term"><span>6 months</span>${priceTag('', 'six')}<small>billed every 6 months</small><em>Save ${saving('six', 6)}%</em></div>
@@ -270,7 +270,7 @@ function pricing() {
 </div></section>
 ${faqBlock(PRICING_FAQ)}
 ${ctaBand('Try it free for a week.')}`
-  return layout({ route: '/pricing', title: `Pricing · ${PRODUCT}`, description: `${PRODUCT} pricing: one plan with everything included, billed monthly, every 6 months or yearly. Shown in USD, EUR or GBP. ${TRIAL_DAYS}-day free trial, cancel any time.`, body, jsonLd: [appLd, faqLd(PRICING_FAQ), crumbs([['Home', '/'], ['Pricing', '/pricing']])] })
+  return layout({ route: '/pricing', title: `Pricing · ${PRODUCT}`, description: `${PRODUCT} pricing: one plan with everything included, billed monthly, every 6 months or yearly. Shown in USD, EUR or GBP. ${TRIAL_DAYS}-day free trial, no card needed.`, body, jsonLd: [appLd, faqLd(PRICING_FAQ), crumbs([['Home', '/'], ['Pricing', '/pricing']])] })
 }
 
 function industriesIndex() {

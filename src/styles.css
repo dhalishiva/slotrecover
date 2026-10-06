@@ -392,3 +392,11 @@
 /* Logo in the top bar on phones, where the sidebar is hidden */
 .top-brand{display:none;align-items:center;gap:8px;font-weight:800;font-size:16px;letter-spacing:-.02em;color:#17191e}
 @media(max-width:760px){.top-brand{display:flex}}
+/* Free trial banners */
+.billing-banner.trial{background:#f4f4ff;border-color:#dcdcfb}
+.billing-banner.trial strong{color:#24264f}.billing-banner.trial span{color:#5d6190}
+.billing-banner.upgrade{background:#fff4dc;border-color:#f0c96a}
+.billing-banner.upgrade strong{font-size:13px}
+.billing-banner.upgrade span{font-size:11px;color:#6f5a22}
+.page .billing-banner{margin:0 0 18px}
+.billing-banner button{white-space:nowrap;flex-shrink:0}

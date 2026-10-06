@@ -48,8 +48,9 @@ function Terms() {
     </S>
     <S h="7. Free trial, subscription and payment">
       <ul>
-        <li>New accounts receive a {site.trialDays}-day free trial. To start the trial you authorise a recurring payment through our payment processor, Razorpay.</li>
-        <li><strong>Unless you cancel before the trial ends, your subscription starts automatically and renews each billing period</strong> at the price shown at sign-up, until cancelled.</li>
+        <li>New accounts receive a {site.trialDays}-day free trial. <strong>No payment method is required.</strong> The free trial includes {site.freeRecoveries} recovered slot from your waitlist; all other features work during the trial. When the trial ends, access pauses until you choose a paid plan. Your data is kept.</li>
+        <li><strong>All payments for {site.product} are made to {site.company}</strong>, the business that operates the Service, through our payment processor (currently Razorpay). Charges appear on your statement under that name.</li>
+        <li>When you upgrade, your paid plan starts immediately and <strong>renews automatically each billing period</strong> (monthly, every 6 months or yearly, as chosen) at the price shown at checkout, until you cancel.</li>
         <li>Fees are charged in advance for each billing period. Prices exclude taxes unless stated; you are responsible for applicable taxes, including VAT or GST under reverse-charge rules where they apply.</li>
         <li>We may change prices with at least 30 days' notice before your next renewal. If you do not agree, you may cancel before the change takes effect.</li>
         <li>If a payment fails, we may retry it and suspend access until the balance is paid.</li>
@@ -284,21 +285,23 @@ function AcceptableUse() {
 function Refunds() {
   return <>
     <S h="Free trial">
-      <p>Every new account gets a {site.trialDays}-day free trial. You authorise a recurring payment with Razorpay at sign-up, but <strong>you are not charged the subscription fee during the trial</strong>. Razorpay or your bank may place a small temporary authorisation to verify your payment method; it is reversed automatically.</p>
-      <p><strong>If you cancel before the trial ends, you will not be charged.</strong> Otherwise your paid subscription starts automatically when the trial ends.</p>
+      <p>Every new account gets a {site.trialDays}-day free trial. <strong>No payment method is needed and nothing is charged automatically.</strong> The trial includes {site.freeRecoveries} recovered slot from your waitlist; you can upgrade at any time for unlimited recovery. When the trial ends, your workspace pauses until you choose a plan.</p>
+    </S>
+    <S h="Who you pay">
+      <p>All payments for {site.product} are made to <strong>{site.company}</strong>, which operates the Service, and are processed securely by Razorpay. Charges appear on your bank or card statement under that name.</p>
     </S>
     <S h="Automatic renewal">
       <p>Subscriptions renew automatically at the end of each billing period at the price shown at sign-up, until you cancel. We will email you before any price change takes effect.</p>
     </S>
     <S h="How to cancel">
-      <p>Cancel online at any time in <strong>Settings → Subscription → Cancel subscription</strong>. If you cancel during your free trial, you are not charged and keep access until the trial ends. If you cancel during a paid period, renewal stops and you keep access until the end of that period.</p>
+      <p>Cancel online at any time in <strong>Settings → Subscription → Cancel subscription</strong>. The free trial needs no cancellation, since nothing is charged. If you cancel during a paid period, renewal stops and you keep access until the end of that period.</p>
       <p>You can also email <Mail to={site.billingEmail}/> from your account email with the subject "Cancel subscription"; we confirm within one business day.</p>
     </S>
     <S h="Refunds">
       <ul>
         <li>Fees are charged in advance and are generally non-refundable, including for partially used billing periods.</li>
         <li>If you were charged after cancelling in time, charged twice, or charged in error, we refund the full amount.</li>
-        <li>If you forgot to cancel your trial and contact us within 7 days of the first charge without having used the paid Service, we will refund that charge.</li>
+        <li>If you contact us within 7 days of your first payment and haven’t used the paid Service, we will refund that payment.</li>
         <li>Where local law gives you additional rights, those rights apply.</li>
       </ul>
       <p>Approved refunds go back to the original payment method, usually within 5–10 business days depending on your bank.</p>
