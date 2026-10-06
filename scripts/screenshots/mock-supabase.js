@@ -106,12 +106,29 @@ const staff_services = staff.flatMap(t => services.map(s => ({ staff_id: t.id, s
 const billing = {
   status: 'active', trial_started_at: ago(60 * 24 * 20), trial_ends_at: ago(60 * 24 * 13), current_period_end: new Date(Date.now() + 17 * 864e5).toISOString(),
   cancel_at_period_end: false, razorpay_subscription_id: 'sub_x', authorization_verified_at: ago(60 * 24 * 20),
-  billing_plans: { name: 'SlotRecover', amount_paise: 2900, currency: 'USD', period: 'monthly', trial_days: 7 },
+  billing_plans: { code: 'live_monthly_usd', name: 'SlotRecover Monthly', amount_paise: 2900, interval_count: 1, currency: 'USD', period: 'monthly', trial_days: 7 },
+}
+
+// ?state=free | free-used | expired switches the account to a free-trial state (for checking banners).
+const STATE = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('state') : null
+if (STATE) {
+  Object.assign(billing, {
+    status: 'trialing', razorpay_subscription_id: null, authorization_verified_at: null, current_period_end: null,
+    trial_started_at: ago(60 * 24 * 9),
+    trial_ends_at: STATE === 'expired' ? ago(60 * 24) : new Date(Date.now() + 21 * 864e5).toISOString(),
+  })
+  if (STATE === 'free') revenue_events.splice(0, revenue_events.length, ...revenue_events.filter(r => r.event_type !== 'recovered'))
+  if (STATE === 'free-used') revenue_events.splice(0, revenue_events.length, ...revenue_events.filter(r => r.event_type !== 'recovered').concat([{ id: 'rx', event_type: 'recovered', amount_cents: 12000, created_at: ago(35) }]))
 }
 
 const tables = {
   practices: [practice], services, appointments, revenue_events, recovery_offers, waitlist_entries,
   reminder_jobs, message_events, staff, staff_services, billing_accounts: [billing], push_subscriptions: [],
+  billing_plans: [
+    { code: 'live_monthly_usd', name: 'SlotRecover Monthly', amount_paise: 2900, currency: 'USD', period: 'monthly', interval_count: 1, trial_days: 30 },
+    { code: 'live_6month_usd', name: 'SlotRecover 6 Months', amount_paise: 16500, currency: 'USD', period: 'monthly', interval_count: 6, trial_days: 30 },
+    { code: 'live_yearly_usd', name: 'SlotRecover Yearly', amount_paise: 29900, currency: 'USD', period: 'yearly', interval_count: 1, trial_days: 30 },
+  ],
 }
 
 function builder(table) {

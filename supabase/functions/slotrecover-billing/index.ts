@@ -180,8 +180,6 @@ Deno.serve(async (req) => {
       const restarting = ["cancelled", "expired", "halted"].includes(billing.status);
       // A subscription left pending on another plan can't be reused either.
       let subscriptionId = restarting || chosen ? null : billing.razorpay_subscription_id;
-      const trialEndMs = new Date(billing.trial_ends_at).getTime();
-      const trialRemaining = trialEndMs > Date.now() + 10 * 60 * 1000;
 
       if (!subscriptionId) {
         const payload: Record<string, unknown> = {
@@ -191,8 +189,8 @@ Deno.serve(async (req) => {
           quantity: 1,
           customer_notify: 0,
         };
-        // Only defer the first charge while trial time remains; otherwise bill now.
-        if (trialRemaining) payload.start_at = Math.floor(trialEndMs / 1000);
+        // The free trial needs no card. Upgrading starts the paid plan straight away, so the
+        // first charge happens at checkout (no deferred start date).
         const subscription = await razorpayFetch("/v1/subscriptions", keyId, keySecret, {
           method: "POST",
           body: JSON.stringify({
@@ -220,8 +218,8 @@ Deno.serve(async (req) => {
         ok: true,
         key_id: keyId,
         subscription_id: subscriptionId,
-        name: "Dhali Services",
-        description: billing.billing_plans.name + (trialRemaining ? " · free trial" : ""),
+        name: "Shiva Dhali Services",
+        description: billing.billing_plans.name,
         amount_paise: billing.billing_plans.amount_paise,
         currency: billing.billing_plans.currency,
         trial_ends_at: billing.trial_ends_at,

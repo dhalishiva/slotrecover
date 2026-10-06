@@ -10,7 +10,7 @@ import { supabase, supabaseConfigured } from './supabase'
 import { LegalPage, isLegalPath } from './legal'
 import { HelpCenter, HelpBubble } from './help'
 import { money, setMoneyCurrency, LogoMark } from './ui'
-import { hasAccess, startCheckout, fetchBillingStatus, accessUntil, detectCurrency, fetchPlans, planMonths, planTerm, notActivated } from './billingClient'
+import { hasAccess, startCheckout, accessUntil, detectCurrency, fetchPlans, planMonths, planTerm, onFreeTrial, freeTrialActive, trialDaysLeft, FREE_RECOVERY_LIMIT } from './billingClient'
 import { SettingsPage } from './settings'
 import { AppointmentModal } from './booking'
 import { ReminderModal, fetchReminderAppointment, reminderSelect } from './whatsapp'
@@ -107,12 +107,12 @@ function AppContent() {
   const skipKey = 'sr_explore_' + (session?.user?.id || '')
   let showActivation = typeof activation === 'string' && activation !== 'skipped'
   if (activation === null) { try { showActivation = localStorage.getItem(skipKey) !== '1' } catch { showActivation = true } }
-  if (locked && showActivation) {
-    return <BillingSetupScreen billing={billing} reason={activation} onReady={() => window.location.reload()}
+  if ((activation === 'upgrade' && billing) || (locked && showActivation)) {
+    return <BillingSetupScreen billing={billing} reason={activation === 'upgrade' ? '' : activation} onReady={() => window.location.reload()}
       onSkip={() => { try { localStorage.setItem(skipKey, '1') } catch {} setActivation('skipped') }} />
   }
   return <Dashboard session={session} demo={demo} onExitDemo={() => setDemo(false)}
-    billing={billing} locked={locked} onActivate={reason => setActivation(reason || '')} />
+    billing={billing} locked={locked} onActivate={reason => setActivation(reason || '')} onUpgrade={() => setActivation('upgrade')} />
 }
 
 function BillingSetupScreen({ billing, reason, onReady, onSkip }) {
@@ -138,11 +138,9 @@ function BillingSetupScreen({ billing, reason, onReady, onSkip }) {
     else if (!res.dismissed) setMessage(res.message)
   }
 
-  // A first-time trial starts when they activate, so it's always the full length.
-  const fresh = notActivated(billing)
   const plan = plans?.find(p => p.code === planCode) || current
-  const trialEnd = fresh ? new Date(Date.now() + (plan?.trial_days || 7) * 86400000) : new Date(billing.trial_ends_at)
-  const daysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / 86400000))
+  const upgradingDuringTrial = freeTrialActive(billing)
+  const trialOver = onFreeTrial(billing) && !upgradingDuringTrial
   const currency = plan?.currency || 'USD'
   const amount = (plan?.amount_paise || 0) / 100
   const formattedAmount = new Intl.NumberFormat('en-US', {
@@ -151,14 +149,7 @@ function BillingSetupScreen({ billing, reason, onReady, onSkip }) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2
   }).format(amount)
-  const formattedZero = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(0)
 
-  const trialLeft = trialEnd.getTime() > Date.now()
   const periodWord = planTerm(plan)
   const monthly = plans?.find(p => planMonths(p) === 1)
   const fmtPlan = (v, digits = 0) => new Intl.NumberFormat('en-US', { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: digits }).format(v)
@@ -167,12 +158,16 @@ function BillingSetupScreen({ billing, reason, onReady, onSkip }) {
   return <div className="billing-setup-shell">
     <div className="billing-setup-card">
       <Brand />
-      {trialLeft ? <>
-        <div className="billing-pill">{reason ? 'ACTIVATION NEEDED' : (plan?.trial_days || 7) + '-DAY FREE TRIAL'}</div>
-        <h1>{reason ? 'Activate SlotRecover to continue.' : 'Start your SlotRecover trial.'}</h1>
-        <p>{reason ? reason + ' ' : ''}Pick a plan and authorize Razorpay. Your {plan?.trial_days || 7}-day free trial starts now, and billing begins after it ends.</p>
+      {upgradingDuringTrial ? <>
+        <div className="billing-pill">UPGRADE</div>
+        <h1>Recover every cancelled slot.</h1>
+        <p>{reason ? reason + ' ' : ''}Your free trial includes {FREE_RECOVERY_LIMIT} recovered slot. Upgrade to have every cancellation offered to your waitlist automatically.</p>
+      </> : trialOver ? <>
+        <div className="billing-pill">FREE TRIAL ENDED</div>
+        <h1>Your free trial has ended.</h1>
+        <p>{reason ? reason + ' ' : ''}Your workspace and data are safe. Choose a plan to keep confirming appointments and recovering cancelled slots.</p>
       </> : <>
-        <div className="billing-pill">{billing.status === 'cancelled' ? 'SUBSCRIPTION CANCELLED' : 'TRIAL ENDED'}</div>
+        <div className="billing-pill">{billing.status === 'cancelled' ? 'SUBSCRIPTION CANCELLED' : 'PLAN INACTIVE'}</div>
         <h1>Restart your SlotRecover subscription.</h1>
         <p>Your workspace and data are still here. Restart your plan to keep confirming appointments and recovering cancelled slots.</p>
       </>}
@@ -190,20 +185,17 @@ function BillingSetupScreen({ billing, reason, onReady, onSkip }) {
         })}
       </div>}
       <div className="billing-summary">
-        {trialLeft && <div><span>Trial remaining</span><strong>{daysLeft} day{daysLeft === 1 ? '' : 's'}</strong></div>}
+        {upgradingDuringTrial && <div><span>Free trial left</span><strong>{trialDaysLeft(billing)} day{trialDaysLeft(billing) === 1 ? '' : 's'}</strong></div>}
         <div><span>Plan</span><strong>{formattedAmount} / {periodWord}</strong></div>
-        <div><span>Charge today</span><strong>{trialLeft ? formattedZero + '*' : formattedAmount}</strong></div>
+        <div><span>Charge today</span><strong>{formattedAmount}</strong></div>
       </div>
       <button className="primary wide" onClick={startBilling} disabled={busy}>
-        {busy ? 'Opening Razorpay…' : trialLeft ? 'Authorize & start trial' : 'Restart subscription'}
+        {busy ? 'Opening Razorpay…' : billing.status === 'cancelled' ? 'Restart subscription' : 'Upgrade now'}
       </button>
-      {trialLeft && <small>*Razorpay may perform a small mandate/authentication transaction depending on the payment method.</small>}
-      <small className="renewal-note">{trialLeft
-        ? <>Your subscription starts automatically when the trial ends and renews every {periodWord} at {formattedAmount} plus applicable taxes until you cancel. Cancel any time before the trial ends and you won't be charged. </>
-        : <>You'll be charged {formattedAmount} today and every {periodWord} after that, plus applicable taxes, until you cancel in Settings. </>}{legal}</small>
+      <small className="renewal-note">You'll be charged {formattedAmount} today and every {periodWord} after that, plus applicable taxes, until you cancel in Settings. Payments are made to <strong>Shiva Dhali Services</strong>, which operates SlotRecover. {legal}</small>
       {localCurrency && localCurrency !== currency && <small className="currency-note">Billing in {localCurrency} is coming soon. For now your plan is charged in {currency}, and your bank converts it.</small>}
       {message && <div className="form-msg">{message}</div>}
-      <button type="button" className="text-btn signout-link" onClick={onSkip}>{reason === null ? 'Skip for now and explore the dashboard' : 'Back to the dashboard'}</button>
+      <button type="button" className="text-btn signout-link" onClick={onSkip}>{trialOver && reason === null ? 'Skip for now and explore the dashboard' : 'Back to the dashboard'}</button>
       <button type="button" className="text-btn signout-link" onClick={() => supabase.auth.signOut()}>Sign out</button>
     </div>
   </div>
@@ -587,7 +579,7 @@ function Brand() {
   return <div className="brand"><LogoMark size={31}/>SlotRecover</div>
 }
 
-function Dashboard({ session, demo, onExitDemo, billing, locked, onActivate }) {
+function Dashboard({ session, demo, onExitDemo, billing, locked, onActivate, onUpgrade }) {
   const [nav, setNav] = useState('Overview')
   const [mobileNav, setMobileNav] = useState(false)
   const [practiceName, setPracticeName] = useState(demo ? 'Atelier No. 7' : '')
@@ -797,15 +789,15 @@ function Dashboard({ session, demo, onExitDemo, billing, locked, onActivate }) {
 
       {!demo && (locked
         ? <ActivateBanner billing={billing} onActivate={() => onActivate('')} />
-        : <BillingBanner session={session} onOpenSettings={() => setNav('Settings')} />)}
+        : <BillingBanner billing={billing} recovered={data.recoveredSlots || 0} onUpgrade={onUpgrade} onOpenSettings={() => setNav('Settings')} />)}
       {!loaded ? <div className="boot inline"><div className="spinner" />Loading your workspace…</div> :
         needsSetup && !demo ? <Onboarding session={session} onDone={loadLive}/> :
         nav === 'Overview' ? <Overview data={data} busy={busy} refresh={loadLive} demo={demo} onNew={newAppointment} onRemind={remind && (a => remind(a.raw))}/> :
         nav === 'Appointments' ? <Appointments appointments={data.appointments} onNew={newAppointment} onRemind={remind && (a => remind(a.raw))}/> :
-        nav === 'Recovery' ? <Recovery waitlist={data.waitlist} onNew={newAppointment}/> :
+        nav === 'Recovery' ? <Recovery waitlist={data.waitlist} onNew={newAppointment} freeLimitReached={!demo && freeTrialActive(billing) && (data.recoveredSlots || 0) >= FREE_RECOVERY_LIMIT} onUpgrade={onUpgrade}/> :
         nav === 'Clients' ? <EmptyPanel title="Client intelligence" text="Client history, confirmation behavior, and waitlist preferences will live here." icon={UsersRound}/> :
         nav === 'Messaging' ? <MessagingPage practice={practice} demo={demo} refreshKey={msgKey} onRemind={remind}/> :
-        <SettingsPage practice={practice} demo={demo} notify={notify} onChanged={loadLive} onActivate={() => onActivate('')}/>
+        <SettingsPage practice={practice} demo={demo} notify={notify} onChanged={loadLive} onActivate={onUpgrade}/>
       }
     </main>
 
@@ -819,31 +811,43 @@ function Dashboard({ session, demo, onExitDemo, billing, locked, onActivate }) {
 }
 
 function ActivateBanner({ billing, onActivate }) {
-  const fresh = notActivated(billing)
+  const trialOver = onFreeTrial(billing)
   return <div className="billing-banner">
     <div>
-      <strong>{fresh ? 'You’re exploring SlotRecover' : billing.status === 'past_due' ? 'Payment failed' : 'Your plan isn’t active'}</strong>
-      <span>{fresh
-        ? 'Set up services, staff and hours as much as you like. Start your free trial when you’re ready to add appointments.'
+      <strong>{trialOver ? 'Your free trial has ended' : billing.status === 'past_due' ? 'Payment failed' : 'Your plan isn’t active'}</strong>
+      <span>{trialOver
+        ? 'Your data is safe. Upgrade to add appointments and keep recovering cancelled slots.'
         : 'Your data is safe. Activate a plan to add appointments and send reminders again.'}</span>
     </div>
-    <button className="primary" onClick={onActivate}>{fresh ? 'Start free trial' : 'Activate plan'}</button>
+    <button className="primary" onClick={onActivate}>{trialOver ? 'Upgrade' : 'Activate plan'}</button>
   </div>
 }
 
-function BillingBanner({ session, onOpenSettings }) {
-  const [billing, setBilling] = useState(null)
-
-  useEffect(() => {
-    if (!session || !supabase) return
-    fetchBillingStatus().then(setBilling).catch(() => {})
-  }, [session?.user?.id])
-
+function BillingBanner({ billing, recovered, onUpgrade, onOpenSettings }) {
   if (!billing) return null
   const until = accessUntil(billing)
   const fmt = d => d ? new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric' }) : ''
-  const trialMs = new Date(billing.trial_ends_at).getTime() - Date.now()
-  const daysLeft = Math.max(0, Math.ceil(trialMs / 86400000))
+
+  if (freeTrialActive(billing)) {
+    const days = trialDaysLeft(billing)
+    const left = days + ' day' + (days === 1 ? '' : 's') + ' left'
+    if (recovered >= FREE_RECOVERY_LIMIT) {
+      return <div className="billing-banner upgrade">
+        <div>
+          <strong>You recovered your free slot 🎉</strong>
+          <span>Your trial includes {FREE_RECOVERY_LIMIT} recovered slot. New cancellations won’t be offered to your waitlist until you upgrade. Bookings, confirmations and reminders keep working ({left}).</span>
+        </div>
+        <button className="primary" onClick={onUpgrade}>Upgrade now</button>
+      </div>
+    }
+    return <div className="billing-banner trial">
+      <div>
+        <strong>Free trial · {left}</strong>
+        <span>No card needed. Includes {FREE_RECOVERY_LIMIT} recovered slot from your waitlist. Upgrade any time for unlimited recovery.</span>
+      </div>
+      <button className="ghost" onClick={onUpgrade}>Upgrade</button>
+    </div>
+  }
 
   let title, text
   if (billing.status === 'cancelled' || billing.cancel_at_period_end) {
@@ -852,19 +856,14 @@ function BillingBanner({ session, onOpenSettings }) {
   } else if (billing.status === 'past_due') {
     title = 'Payment failed'
     text = 'Razorpay could not charge your payment method. Update it to avoid interruption.'
-  } else if (trialMs > 0) {
-    title = 'Free trial · billing authorized'
-    text = daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + ' left. Your plan starts on ' + fmt(billing.trial_ends_at) + ' unless you cancel.'
   } else {
     return null
   }
-
   return <div className="billing-banner">
     <div><strong>{title}</strong><span>{text}</span></div>
     <button className="ghost" onClick={onOpenSettings}>Manage subscription</button>
   </div>
 }
-
 
 function Onboarding({ session, onDone }) {
   const [practice, setPractice] = useState('')
@@ -989,7 +988,7 @@ function Appointments({ appointments, onNew, onRemind }) {
   </div>
 }
 
-function Recovery({ waitlist, onNew }) {
+function Recovery({ waitlist, onNew, freeLimitReached, onUpgrade }) {
   return <div className="page">
     <div className="page-heading"><div><div className="eyebrow-dark">AUTOMATED CAPACITY RECOVERY</div><h1>Recovery engine</h1><p>Turn cancellations into a sequenced waitlist offer before the slot goes cold.</p></div></div>
     <div className="recovery-flow">
@@ -998,6 +997,10 @@ function Recovery({ waitlist, onNew }) {
       <FlowStep n="03" title="15-minute offer" text="No response automatically advances to the next matching client." icon={Clock3}/>
       <FlowStep n="04" title="Revenue recovered" text="The replacement appointment is booked and attributed to recovered revenue." icon={CircleDollarSign}/>
     </div>
+    {freeLimitReached && <div className="billing-banner upgrade">
+      <div><strong>Recovery is paused on the free trial</strong><span>You’ve used your free recovered slot. Upgrade and cancelled slots go straight back to offering your waitlist.</span></div>
+      <button className="primary" onClick={onUpgrade}>Upgrade now</button>
+    </div>}
     <section className="panel waitlist-panel">
       <div className="panel-head"><div><h2>Current waitlist</h2><p>Clients waiting for a time that was booked. Added from New appointment or the client reschedule page.</p></div></div>
       {waitlist?.length ? waitlist.map(w => <div className="wait-row" key={w.id}>

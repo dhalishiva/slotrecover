@@ -34,10 +34,23 @@ export function planTerm(plan) {
   return m === 12 ? 'year' : m === 1 ? 'month' : m + ' months'
 }
 
-// Signed up but never started a trial or plan: they can explore, not book.
-export function notActivated(billing) {
-  return Boolean(billing && billing.status === 'trialing' && !billing.razorpay_subscription_id && !billing.authorization_verified_at)
+// Free trial: no card needed. Includes FREE_RECOVERY_LIMIT recovered slot(s); everything else
+// (bookings, confirmations, reminders) works fully until the trial ends.
+// Must match private.practice_plan_state() in the database.
+export const FREE_RECOVERY_LIMIT = 1
+
+// On the free plan path: never upgraded (opening checkout without finishing still counts).
+export function onFreeTrial(billing) {
+  return Boolean(billing && ['trialing', 'authorization_pending'].includes(billing.status) && !billing.authorization_verified_at)
 }
+export function freeTrialActive(billing) {
+  return onFreeTrial(billing) && new Date(billing.trial_ends_at).getTime() > Date.now()
+}
+export function trialDaysLeft(billing) {
+  return Math.max(0, Math.ceil((new Date(billing?.trial_ends_at).getTime() - Date.now()) / 86400000))
+}
+// Kept for older call sites: "signed up, never paid" (trial running or over).
+export const notActivated = onFreeTrial
 
 export async function fetchPlans(currency) {
   const { data, error } = await supabase.from('billing_plans')
@@ -49,6 +62,7 @@ export async function fetchPlans(currency) {
 
 export function hasAccess(billing) {
   if (!billing) return true
+  if (freeTrialActive(billing)) return true
   if (['authenticated', 'active'].includes(billing.status)) return true
   if (billing.status === 'cancelled') {
     const until = accessUntil(billing)
@@ -80,7 +94,7 @@ export async function startCheckout(planCode) {
     const checkout = new window.Razorpay({
       key: data.key_id,
       subscription_id: data.subscription_id,
-      name: 'Dhali Services',
+      name: 'Shiva Dhali Services',
       description: data.description,
       prefill: data.prefill,
       theme: { color: '#17191e' },

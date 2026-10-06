@@ -3,7 +3,7 @@
 // before public launch, then have a lawyer review the legal pages.
 export const site = {
   product: 'SlotRecover',
-  company: 'Dhali Services',
+  company: 'Shiva Dhali Services',
   // TODO: legal form, e.g. "a sole proprietorship registered in India"
   companyDescription: 'a business registered in India',
   // TODO: full registered postal address (required on invoices, GDPR and CAN-SPAM)
@@ -20,6 +20,7 @@ export const site = {
   venue: 'the courts of New Delhi, India',
   effectiveDate: 'September 29, 2026',
   dataRegion: 'South Korea (Seoul, ap-northeast-2)',
-  trialDays: 7,
+  trialDays: 30,
+  freeRecoveries: 1,
   offerExpiryMinutes: 15,
 }

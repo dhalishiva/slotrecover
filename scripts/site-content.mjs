@@ -4,7 +4,7 @@
 
 export const SITE_URL = 'https://www.slotrecover.pro'
 export const PRODUCT = 'SlotRecover'
-export const COMPANY = 'Dhali Services'
+export const COMPANY = 'Shiva Dhali Services'
 
 // Fixed regional price points: monthly, and totals for the 6-month and yearly terms.
 // Billing is in USD (live plans: $29, $165, $299); EUR/GBP are display prices.
@@ -13,7 +13,9 @@ export const PRICES = {
   EUR: { amount: 27, six: 155, year: 279, symbol: '€', label: 'EUR' },
   GBP: { amount: 24, six: 135, year: 249, symbol: '£', label: 'GBP' },
 }
-export const TRIAL_DAYS = 7
+export const TRIAL_DAYS = 30
+// Recovered slots included in the free trial (keep in sync with the app and database).
+export const FREE_RECOVERIES = 1
 
 export const FEATURES = [
   ['Automatic confirmations', 'Every booked client gets one confirmation email in the 24 hours before their appointment, with Confirm, Reschedule and Cancel buttons.'],
@@ -36,15 +38,15 @@ export const HOME_FAQ = [
   ['How is this different from a booking app?', 'Most booking apps stop at taking the booking. SlotRecover focuses on what happens after: confirming attendance, handling reschedules, and refilling cancelled slots from a waitlist so the time still earns money.'],
   ['Do my clients need to download anything?', 'No. Clients use links in their email or WhatsApp message. Only you and your team use the SlotRecover app.'],
   ['Can I use it with more than one staff member?', 'Yes. Add your staff and the services each person offers. Availability, waitlist offers and reminders all respect who is free.'],
-  ['How much does it cost?', `There is a ${TRIAL_DAYS}-day free trial, then a single monthly plan priced in your local currency. You can cancel any time from Settings.`],
+  ['How much does it cost?', `Start with a ${TRIAL_DAYS}-day free trial, no card needed. Then one plan, everything included, billed monthly, every 6 months or yearly. Cancel any time from Settings.`],
   ['Is my data safe and GDPR-ready?', 'Each business’s data is isolated with row-level security and encrypted in transit and at rest. We act as your processor under a Data Processing Addendum with EU Standard Contractual Clauses.'],
 ]
 
 export const PRICING_FAQ = [
   ['Why do I see prices in my currency?', 'We show prices in US dollars, euros or British pounds based on your location. Everywhere else, including India, sees US dollars. You can switch currency on this page.'],
-  ['Can I pay for 6 months or a year?', 'Yes. Choose monthly, 6 months or yearly when you start your trial. Longer terms cost less per month, and you’re billed for the whole term when the free trial ends.'],
+  ['Can I pay for 6 months or a year?', 'Yes. Choose monthly, 6 months or yearly when you upgrade. Longer terms cost less per month and are billed for the whole term upfront.'],
   ['Is tax included?', 'Prices exclude VAT, GST or sales tax, which is added where it applies.'],
-  ['What happens after the free trial?', `Your plan starts automatically when the ${TRIAL_DAYS}-day trial ends. Cancel before then from Settings and you won’t be charged.`],
+  ['What happens after the free trial?', `Nothing is charged automatically: there’s no card on file. The trial includes ${FREE_RECOVERIES} recovered slot from your waitlist; upgrade any time for unlimited recovery. When the ${TRIAL_DAYS} days end, your workspace pauses until you choose a plan, and your data stays safe.`],
   ['Can I cancel any time?', 'Yes. Cancel in Settings → Subscription. You keep access until the end of the period you’ve paid for.'],
   ['Do you charge per staff member?', 'Not at the moment. One plan covers your business and your team.'],
 ]
@@ -97,7 +99,7 @@ export const INDUSTRIES = [
     helps: ['Clients confirm in one tap', 'Cancelled times are offered to waitlisted clients for the same treatment', 'Your cancellation policy is included in every reminder'],
     example: 'Example: a $95 lash refill cancels 3 hours before. A waitlisted client who wanted an earlier date takes the slot.',
     appointments: ['Lash refill', 'Classic full set', 'Volume set', 'Brow lamination', 'Brow shape & tint', 'Waxing'],
-    faqs: [['Can clients join a waitlist themselves?', 'Yes. If no time works when rescheduling, clients can join the waitlist for that date.'], ['Can I add my patch test or deposit policy?', 'Yes. Add it as your note to clients in Settings.'], ['Is there a free trial?', `Yes, ${TRIAL_DAYS} days.`]],
+    faqs: [['Can clients join a waitlist themselves?', 'Yes. If no time works when rescheduling, clients can join the waitlist for that date.'], ['Can I add my patch test or deposit policy?', 'Yes. Add it as your note to clients in Settings.'], ['Is there a free trial?', `Yes, ${TRIAL_DAYS} days, no card needed.`]],
   },
   {
     slug: 'spas-and-estheticians', name: 'Spas & estheticians', short: 'Day spas & estheticians',
@@ -181,7 +183,7 @@ export const INDUSTRIES = [
     helps: ['Confirmation requests before each lesson', 'Waitlist offers for freed after-school slots', 'Students reschedule to real free times in one step'],
     example: 'Example: a $45 piano lesson is cancelled the morning of. A waitlisted student takes the slot.',
     appointments: ['Piano lesson', 'Guitar lesson', 'Voice lesson', 'Drum lesson', 'Trial lesson'],
-    faqs: [['Can I have 30 and 60-minute lessons?', 'Yes. Create a service for each length.'], ['Can several teachers share one account?', 'Yes. Add teachers as staff with the instruments they teach.'], ['Is there a free trial?', `Yes, ${TRIAL_DAYS} days.`]],
+    faqs: [['Can I have 30 and 60-minute lessons?', 'Yes. Create a service for each length.'], ['Can several teachers share one account?', 'Yes. Add teachers as staff with the instruments they teach.'], ['Is there a free trial?', `Yes, ${TRIAL_DAYS} days, no card needed.`]],
   },
   {
     slug: 'photographers', name: 'Photographers', short: 'Portrait & headshot studios',
@@ -229,7 +231,7 @@ export const INDUSTRIES = [
     helps: ['Confirmation requests before each visit', 'Waitlist offers for cancelled visit slots', 'Team-aware availability for crews'],
     example: 'Example: a $160 deep clean cancels the evening before. A waitlisted customer takes the slot the next morning.',
     appointments: ['Deep clean', 'Regular clean', 'Carpet cleaning', 'Handyman visit', 'Quote visit'],
-    faqs: [['Can I add access instructions?', 'Yes. Add them as your note to clients.'], ['Can I assign jobs to specific team members?', 'Yes. Add team members as staff with the services they do.'], ['Is there a free trial?', `Yes, ${TRIAL_DAYS} days.`]],
+    faqs: [['Can I add access instructions?', 'Yes. Add them as your note to clients.'], ['Can I assign jobs to specific team members?', 'Yes. Add team members as staff with the services they do.'], ['Is there a free trial?', `Yes, ${TRIAL_DAYS} days, no card needed.`]],
   },
   {
     slug: 'consultants-and-accountants', name: 'Consultants & accountants', short: 'Accountants & consultants',
@@ -253,7 +255,7 @@ export const INDUSTRIES = [
     helps: ['Confirmation requests before each fitting', 'Waitlist offers to clients who need an earlier date', 'Staff-aware availability for seamstresses'],
     example: 'Example: a bridal fitting cancels two days before. A waitlisted bride who needed an earlier fitting takes the slot.',
     appointments: ['Bridal fitting', 'Alteration fitting', 'Measurement', 'Consultation'],
-    faqs: [['Can I add what to bring to a fitting?', 'Yes, as your note to clients.'], ['Can I set longer bridal appointments?', 'Yes. Each service has its own length.'], ['Is there a free trial?', `Yes, ${TRIAL_DAYS} days.`]],
+    faqs: [['Can I add what to bring to a fitting?', 'Yes, as your note to clients.'], ['Can I set longer bridal appointments?', 'Yes. Each service has its own length.'], ['Is there a free trial?', `Yes, ${TRIAL_DAYS} days, no card needed.`]],
   },
   {
     slug: 'wellness-studios', name: 'Wellness studios', short: 'Float, sauna & recovery studios',
@@ -265,6 +267,6 @@ export const INDUSTRIES = [
     helps: ['Confirmation requests before each session', 'Waitlist offers for freed peak-time sessions', 'Recovered revenue shown on your dashboard'],
     example: 'Example: a $75 float session at 7 PM cancels at 2 PM. A waitlisted client takes it from the offer email.',
     appointments: ['Float session', 'Infrared sauna', 'Cryotherapy', 'Compression session', 'Recovery package'],
-    faqs: [['Can I treat each room or device as a resource?', 'Yes. Add each room or device as a “staff” member and tick the sessions it supports.'], ['Can clients join a waitlist?', 'Yes, when rescheduling.'], ['Is there a free trial?', `Yes, ${TRIAL_DAYS} days.`]],
+    faqs: [['Can I treat each room or device as a resource?', 'Yes. Add each room or device as a “staff” member and tick the sessions it supports.'], ['Can clients join a waitlist?', 'Yes, when rescheduling.'], ['Is there a free trial?', `Yes, ${TRIAL_DAYS} days, no card needed.`]],
   },
 ]
