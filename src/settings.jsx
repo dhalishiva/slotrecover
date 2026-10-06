@@ -3,7 +3,7 @@ import { Building2, Clock3, CreditCard, Download, KeyRound, MessageSquareText, P
 import { InstallModal, NotificationsControl, useInstallState } from './appInstall'
 import { supabase } from './supabase'
 import { Field, Modal, money } from './ui'
-import { accessUntil, cancelSubscription, fetchBillingStatus, onFreeTrial, freeTrialActive, planTerm, startCheckout, FREE_RECOVERY_LIMIT } from './billingClient'
+import { accessUntil, cancelSubscription, fetchBillingStatus, onFreeTrial, freeTrialActive, planTerm, FREE_RECOVERY_LIMIT } from './billingClient'
 
 const DAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']]
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF', 'SEK', 'NOK', 'DKK', 'PLN', 'INR']
@@ -179,14 +179,7 @@ function BillingSection({ notify, onActivate }) {
     setBusy(false)
   }
 
-  async function restart() {
-    setBusy(true); setError('')
-    const res = await startCheckout()
-    if (res.redirecting) return // on the way to PayPal
-    setBusy(false)
-    if (res.ok) { notify('Subscription restarted'); window.location.reload() }
-    else if (!res.dismissed) setError(res.message)
-  }
+
 
   if (!billing) return <Section icon={CreditCard} title="Subscription" text="Your SlotRecover plan and billing.">{error ? <div className="form-msg">{error}</div> : <div className="spinner"/>}</Section>
 
@@ -220,7 +213,7 @@ function BillingSection({ notify, onActivate }) {
       <a className="text-link" href="/refunds" target="_blank" rel="noreferrer">Refund & Cancellation Policy</a>
       {canCancel && <button type="button" className="danger-btn" onClick={() => setConfirming(true)}>Cancel subscription</button>}
       {fresh && onActivate && <button type="button" className="primary" onClick={onActivate}>Upgrade</button>}
-      {cancelled && <button type="button" className="primary" disabled={busy} onClick={restart}>{busy ? 'Opening PayPal…' : 'Restart subscription'}</button>}
+      {cancelled && <button type="button" className="primary" disabled={busy} onClick={() => onActivate()}>Restart subscription</button>}
       {endingSoon && <span className="settings-note">Changed your mind? Email billing support to keep your plan.</span>}
     </div>
 

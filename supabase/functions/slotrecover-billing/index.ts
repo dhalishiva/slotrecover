@@ -1,6 +1,6 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { applySubscription, BRAND_NAME, ensurePlan, ensureWebhook, getSubscription, paypal, paypalConfigured } from "./paypal.ts";
+import { applySubscription, BRAND_NAME, ensurePlan, ensureWebhook, getSubscription, paypal, paypalClientId, paypalConfigured, paypalEnv } from "./paypal.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -70,6 +70,11 @@ Deno.serve(async (req) => {
         error: "paypal_not_configured",
         message: "Payments are being set up. Please try again shortly.",
       }, 503);
+    }
+
+    // What the browser needs to show PayPal's buttons.
+    if (action === "checkout_config") {
+      return respond({ ok: true, client_id: paypalClientId(), env: paypalEnv() });
     }
 
     if (action === "create_subscription") {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   Activity, ArrowUpRight, BellRing, CalendarDays, CheckCircle2, ChevronRight,
@@ -10,7 +10,7 @@ import { supabase, supabaseConfigured } from './supabase'
 import { LegalPage, isLegalPath } from './legal'
 import { HelpCenter, HelpBubble } from './help'
 import { money, setMoneyCurrency, LogoMark } from './ui'
-import { hasAccess, startCheckout, confirmPaypalReturn, accessUntil, detectCurrency, fetchPlans, planMonths, planTerm, onFreeTrial, freeTrialActive, trialDaysLeft, FREE_RECOVERY_LIMIT } from './billingClient'
+import { hasAccess, startCheckout, confirmWithRetry, loadPaypalSdk, createPaypalSubscription, accessUntil, detectCurrency, fetchPlans, planMonths, planTerm, onFreeTrial, freeTrialActive, trialDaysLeft, FREE_RECOVERY_LIMIT } from './billingClient'
 import { SettingsPage } from './settings'
 import { AppointmentModal } from './booking'
 import { ReminderModal, fetchReminderAppointment, reminderSelect } from './whatsapp'
@@ -195,8 +195,9 @@ function BillingSetupScreen({ billing, reason, onReady, onSkip }) {
         <div><span>Plan</span><strong>{formattedAmount} / {periodWord}</strong></div>
         <div><span>Charge today</span><strong>{formattedAmount}</strong></div>
       </div>
-      <button className="primary wide" onClick={startBilling} disabled={busy}>
-        {busy ? 'Opening PayPal…' : billing.status === 'cancelled' ? 'Restart subscription' : 'Upgrade with PayPal'}
+      <PaypalButtons planCode={planCode} onApproved={onReady} onMessage={setMessage} />
+      <button type="button" className="text-btn paypal-fallback" onClick={startBilling} disabled={busy}>
+        {busy ? 'Opening PayPal…' : 'Buttons not showing? Continue on PayPal’s website'}
       </button>
       <small className="renewal-note">You'll be charged {formattedAmount} today and every {periodWord} after that, plus applicable taxes, until you cancel in Settings. Payments are made to <strong>Shiva Dhali Services</strong>, which operates SlotRecover, through PayPal. Pay with your PayPal account or a debit or credit card. {legal}</small>
       {localCurrency && localCurrency !== currency && <small className="currency-note">Billing in {localCurrency} is coming soon. For now your plan is charged in {currency}, and your bank converts it.</small>}
@@ -207,6 +208,45 @@ function BillingSetupScreen({ billing, reason, onReady, onSkip }) {
   </div>
 }
 
+
+// PayPal's buttons: "PayPal" and "Debit or Credit Card" (card checkout opens in place, no PayPal
+// account needed where PayPal supports it for the buyer's country).
+function PaypalButtons({ planCode, onApproved, onMessage }) {
+  const box = useRef(null)
+  const plan = useRef(planCode)
+  plan.current = planCode
+  const [state, setState] = useState('loading') // loading | ready | confirming | failed
+  useEffect(() => {
+    let buttons = null
+    let gone = false
+    loadPaypalSdk().then(paypal => {
+      if (gone || !box.current) return
+      buttons = paypal.Buttons({
+        style: { layout: 'vertical', shape: 'rect', color: 'gold', label: 'subscribe', height: 45 },
+        createSubscription: async () => {
+          onMessage('')
+          try { return await createPaypalSubscription(plan.current) }
+          catch (e) { onMessage(e.message); throw e }
+        },
+        onApprove: async data => {
+          setState('confirming')
+          const res = await confirmWithRetry(data.subscriptionID)
+          if (res?.ok) onApproved()
+          else { setState('ready'); onMessage(res?.message || 'We could not confirm your PayPal subscription.') }
+        },
+        onCancel: () => onMessage('Checkout closed. Nothing was charged.'),
+        onError: () => onMessage(m => m || 'PayPal checkout failed. Please try again.')
+      })
+      return buttons.render(box.current).then(() => { if (!gone) setState('ready') })
+    }).catch(e => { if (!gone) { setState('failed'); onMessage(e.message) } })
+    return () => { gone = true; try { buttons?.close() } catch {} }
+  }, [])
+  return <div className="paypal-box">
+    {state === 'loading' && <div className="paypal-loading"><div className="spinner" />Loading secure checkout…</div>}
+    {state === 'confirming' && <div className="paypal-loading"><div className="spinner" />Confirming your subscription…</div>}
+    <div ref={box} hidden={state === 'confirming' || state === 'failed'} />
+  </div>
+}
 
 // PayPal sends the customer back here after checkout (?paypal=return&subscription_id=…) or when
 // they cancel it (?paypal=cancel).
@@ -219,12 +259,7 @@ function PaypalReturnScreen({ outcome, subscriptionId }) {
     let stop = false
     ;(async () => {
       // PayPal can take a few seconds to activate a just-approved subscription.
-      let res
-      for (let attempt = 0; attempt < 3 && !stop; attempt++) {
-        res = await confirmPaypalReturn(subscriptionId)
-        if (res.ok) break
-        await new Promise(r => setTimeout(r, 2500))
-      }
+      const res = await confirmWithRetry(subscriptionId)
       if (stop) return
       if (res?.ok) { setState('ok'); setTimeout(done, 1500) }
       else { setMessage(res?.message || 'We could not confirm your PayPal subscription.'); setState('error') }

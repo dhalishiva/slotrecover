@@ -31,6 +31,11 @@ export function paypalEnv(): "live" | "sandbox" {
   return clean(Deno.env.get("PAYPAL_ENV")).toLowerCase() === "sandbox" ? "sandbox" : "live";
 }
 
+// The REST app's client ID is public (the browser SDK needs it); the secret never leaves the server.
+export function paypalClientId() {
+  return clean(Deno.env.get("PAYPAL_CLIENT_ID"));
+}
+
 export function paypalConfigured() {
   return Boolean(clean(Deno.env.get("PAYPAL_CLIENT_ID")) && clean(Deno.env.get("PAYPAL_CLIENT_SECRET")));
 }

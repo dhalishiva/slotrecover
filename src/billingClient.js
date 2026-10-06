@@ -83,6 +83,48 @@ export async function startCheckout(planCode) {
   return { ok: false, redirecting: true }
 }
 
+// PayPal's own buttons (PayPal + Debit or Credit Card) shown right on the upgrade screen.
+let sdkPromise = null
+export function loadPaypalSdk() {
+  if (!sdkPromise) {
+    sdkPromise = (async () => {
+      const { data, error } = await supabase.functions.invoke('slotrecover-billing', { body: { action: 'checkout_config' } })
+      if (error || data?.error) throw new Error(await invokeError(error, data, 'PayPal is not available right now.'))
+      if (!window.paypal?.Buttons) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script')
+          script.src = 'https://www.paypal.com/sdk/js?client-id=' + encodeURIComponent(data.client_id) +
+            '&vault=true&intent=subscription&components=buttons&disable-funding=paylater,venmo'
+          script.onload = resolve
+          script.onerror = () => reject(new Error('PayPal could not load. Check your connection or ad blocker and try again.'))
+          document.head.appendChild(script)
+        })
+      }
+      return window.paypal
+    })().catch(e => { sdkPromise = null; throw e })
+  }
+  return sdkPromise
+}
+
+// Creates the subscription on the server; the PayPal buttons then ask the customer to approve it.
+export async function createPaypalSubscription(planCode) {
+  const currency = await detectCurrency()
+  const { data, error } = await supabase.functions.invoke('slotrecover-billing', { body: { action: 'create_subscription', currency, plan_code: planCode || undefined } })
+  if (error || data?.error) throw new Error(await invokeError(error, data, 'Unable to start PayPal checkout.'))
+  return data.subscription_id
+}
+
+// Confirms an approved subscription, retrying while PayPal finishes activating it.
+export async function confirmWithRetry(subscriptionId, attempts = 3) {
+  let res
+  for (let i = 0; i < attempts; i++) {
+    res = await confirmPaypalReturn(subscriptionId)
+    if (res.ok) return res
+    if (i < attempts - 1) await new Promise(r => setTimeout(r, 2500))
+  }
+  return res
+}
+
 // Back from PayPal: confirm the subscription on the server. Resolves to { ok, message }.
 export async function confirmPaypalReturn(subscriptionId) {
   const { data, error } = await supabase.functions.invoke('slotrecover-billing', { body: { action: 'verify_checkout', subscription_id: subscriptionId } })
