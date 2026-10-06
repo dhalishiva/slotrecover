@@ -9,8 +9,7 @@ update public.billing_plans set trial_days = 30, updated_at = now() where plan_g
 -- Existing free-trial accounts (no card, no subscription) get the full 30 days from signup.
 update public.billing_accounts
 set trial_ends_at = trial_started_at + interval '30 days', updated_at = now()
-where status = 'trialing'
-  and razorpay_subscription_id is null
+where status in ('trialing', 'authorization_pending')
   and authorization_verified_at is null;
 
 -- 2. One place that says what a workspace is entitled to.

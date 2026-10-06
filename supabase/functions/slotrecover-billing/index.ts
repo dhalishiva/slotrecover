@@ -140,16 +140,7 @@ Deno.serve(async (req) => {
         billing.billing_plans = chosen;
       }
 
-      // Users can explore before activating, so a first-time trial starts when they activate.
-      if (billing.status === "trialing" && !billing.razorpay_subscription_id && !billing.authorization_verified_at) {
-        const now = new Date();
-        const trialEnds = new Date(now.getTime() + (billing.billing_plans?.trial_days || 0) * 86400000);
-        await admin.from("billing_accounts")
-          .update({ trial_started_at: now.toISOString(), trial_ends_at: trialEnds.toISOString(), updated_at: now.toISOString() })
-          .eq("user_id", user.id);
-        billing.trial_started_at = now.toISOString();
-        billing.trial_ends_at = trialEnds.toISOString();
-      }
+      // The free trial starts at signup (no card) and is never restarted at checkout.
 
       let razorpayPlanId = billing.billing_plans?.razorpay_plan_id;
 
