@@ -71,52 +71,23 @@ export function hasAccess(billing) {
   return false
 }
 
-function loadRazorpay() {
-  if (window.Razorpay) return Promise.resolve(true)
-  return new Promise(resolve => {
-    const script = document.createElement('script')
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    script.onload = () => resolve(true)
-    script.onerror = () => resolve(false)
-    document.body.appendChild(script)
-  })
-}
-
-// Creates (or reuses) the Razorpay subscription, opens Checkout and verifies it.
-// Resolves to { ok: true } or { ok: false, message }, or { ok: false, dismissed: true }.
+// Creates the PayPal subscription and sends the customer to PayPal to approve it.
+// PayPal then returns to /app?paypal=return&subscription_id=..., handled by confirmPaypalReturn.
+// Resolves to { ok: false, redirecting: true } while leaving the page, or { ok: false, message }.
 export async function startCheckout(planCode) {
   const currency = await detectCurrency()
   const { data, error } = await supabase.functions.invoke('slotrecover-billing', { body: { action: 'create_subscription', currency, plan_code: planCode || undefined } })
-  if (error || data?.error) return { ok: false, message: await invokeError(error, data, 'Unable to start Razorpay.') }
-  if (!(await loadRazorpay())) return { ok: false, message: 'Unable to load Razorpay Checkout.' }
+  if (error || data?.error) return { ok: false, message: await invokeError(error, data, 'Unable to start PayPal checkout.') }
+  if (!data?.approve_url) return { ok: false, message: 'PayPal did not return a checkout link. Please try again.' }
+  window.location.assign(data.approve_url)
+  return { ok: false, redirecting: true }
+}
 
-  return await new Promise(resolve => {
-    const checkout = new window.Razorpay({
-      key: data.key_id,
-      subscription_id: data.subscription_id,
-      name: 'Shiva Dhali Services',
-      description: data.description,
-      prefill: data.prefill,
-      theme: { color: '#17191e' },
-      handler: async response => {
-        const { data: verified, error: verifyError } = await supabase.functions.invoke('slotrecover-billing', {
-          body: {
-            action: 'verify_checkout',
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_subscription_id: response.razorpay_subscription_id,
-            razorpay_signature: response.razorpay_signature
-          }
-        })
-        if (verifyError || verified?.error) {
-          resolve({ ok: false, message: await invokeError(verifyError, verified, 'Authorization could not be verified.') })
-          return
-        }
-        resolve({ ok: true })
-      },
-      modal: { ondismiss: () => resolve({ ok: false, dismissed: true }) }
-    })
-    checkout.open()
-  })
+// Back from PayPal: confirm the subscription on the server. Resolves to { ok, message }.
+export async function confirmPaypalReturn(subscriptionId) {
+  const { data, error } = await supabase.functions.invoke('slotrecover-billing', { body: { action: 'verify_checkout', subscription_id: subscriptionId } })
+  if (error || data?.error) return { ok: false, message: await invokeError(error, data, 'We could not confirm your PayPal subscription.') }
+  return { ok: true, status: data.status }
 }
 
 export async function fetchBillingStatus() {

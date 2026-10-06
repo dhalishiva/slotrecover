@@ -258,7 +258,7 @@ function pricing() {
   <div class="plan">
     <div class="plan-head"><h2>${PRODUCT}</h2><p>For solo professionals and small teams</p></div>
     <div class="plan-price">${priceTag('big')}<span class="per">/ month · <span data-currency>USD</span></span></div>
-    <p class="plan-trial">${TRIAL_DAYS}-day free trial, no card needed (includes 1 recovered slot) · upgrade any time · taxes extra where applicable · payments to ${COMPANY}</p>
+    <p class="plan-trial">${TRIAL_DAYS}-day free trial, no card needed (includes 1 recovered slot) · upgrade any time · taxes extra where applicable · pay with PayPal or card · payments to ${COMPANY}</p>
     <div class="terms">
       <div class="term"><span>Monthly</span>${priceTag()}<small>per month</small></div>
       <div class="term"><span>6 months</span>${priceTag('', 'six')}<small>billed every 6 months</small><em>Save ${saving('six', 6)}%</em></div>

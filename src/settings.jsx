@@ -182,6 +182,7 @@ function BillingSection({ notify, onActivate }) {
   async function restart() {
     setBusy(true); setError('')
     const res = await startCheckout()
+    if (res.redirecting) return // on the way to PayPal
     setBusy(false)
     if (res.ok) { notify('Subscription restarted'); window.location.reload() }
     else if (!res.dismissed) setError(res.message)
@@ -197,12 +198,12 @@ function BillingSection({ notify, onActivate }) {
   const until = accessUntil(billing)
   const cancelled = billing.status === 'cancelled'
   const endingSoon = billing.cancel_at_period_end && !cancelled
-  const canCancel = !fresh && billing.razorpay_subscription_id && ['authenticated', 'active', 'authorization_pending', 'past_due'].includes(billing.status) && !endingSoon
+  const canCancel = !fresh && (billing.paypal_subscription_id || billing.razorpay_subscription_id) && ['authenticated', 'active', 'authorization_pending', 'past_due'].includes(billing.status) && !endingSoon
 
   const statusLabel = fresh ? (freeActive ? 'Free trial' : 'Trial ended') : cancelled ? 'Cancelled' : endingSoon ? 'Cancels at period end' : inTrial ? 'Free trial' : billing.status === 'active' ? 'Active' : billing.status === 'past_due' ? 'Payment failed' : billing.status.replace(/_/g, ' ')
   const statusTone = cancelled || billing.status === 'past_due' || (fresh && !freeActive) ? 'danger' : endingSoon || fresh ? 'wait' : 'ok'
 
-  return <Section icon={CreditCard} title="Subscription" text="Payments are made to Shiva Dhali Services, through Razorpay.">
+  return <Section icon={CreditCard} title="Subscription" text="Payments are made to Shiva Dhali Services, through PayPal.">
     <div className="billing-grid">
       <div><span>Plan</span><strong>{plan?.name || '—'}</strong><small>{price}</small></div>
       <div><span>Status</span><strong><span className={'status ' + statusTone}>{statusLabel}</span></strong></div>
@@ -219,7 +220,7 @@ function BillingSection({ notify, onActivate }) {
       <a className="text-link" href="/refunds" target="_blank" rel="noreferrer">Refund & Cancellation Policy</a>
       {canCancel && <button type="button" className="danger-btn" onClick={() => setConfirming(true)}>Cancel subscription</button>}
       {fresh && onActivate && <button type="button" className="primary" onClick={onActivate}>Upgrade</button>}
-      {cancelled && <button type="button" className="primary" disabled={busy} onClick={restart}>{busy ? 'Opening Razorpay…' : 'Restart subscription'}</button>}
+      {cancelled && <button type="button" className="primary" disabled={busy} onClick={restart}>{busy ? 'Opening PayPal…' : 'Restart subscription'}</button>}
       {endingSoon && <span className="settings-note">Changed your mind? Email billing support to keep your plan.</span>}
     </div>
 

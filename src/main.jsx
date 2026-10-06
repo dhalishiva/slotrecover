@@ -10,7 +10,7 @@ import { supabase, supabaseConfigured } from './supabase'
 import { LegalPage, isLegalPath } from './legal'
 import { HelpCenter, HelpBubble } from './help'
 import { money, setMoneyCurrency, LogoMark } from './ui'
-import { hasAccess, startCheckout, accessUntil, detectCurrency, fetchPlans, planMonths, planTerm, onFreeTrial, freeTrialActive, trialDaysLeft, FREE_RECOVERY_LIMIT } from './billingClient'
+import { hasAccess, startCheckout, confirmPaypalReturn, accessUntil, detectCurrency, fetchPlans, planMonths, planTerm, onFreeTrial, freeTrialActive, trialDaysLeft, FREE_RECOVERY_LIMIT } from './billingClient'
 import { SettingsPage } from './settings'
 import { AppointmentModal } from './booking'
 import { ReminderModal, fetchReminderAppointment, reminderSelect } from './whatsapp'
@@ -83,7 +83,7 @@ function AppContent() {
     }
     setBillingLoading(true)
     supabase.from('billing_accounts')
-      .select('status,trial_started_at,trial_ends_at,current_period_end,cancel_at_period_end,razorpay_subscription_id,authorization_verified_at,billing_plans(code,name,amount_paise,currency,period,interval_count,trial_days)')
+      .select('status,trial_started_at,trial_ends_at,current_period_end,cancel_at_period_end,payment_provider,paypal_subscription_id,authorization_verified_at,billing_plans(code,name,amount_paise,currency,period,interval_count,trial_days)')
       .eq('user_id', session.user.id)
       .single()
       .then(({ data }) => {
@@ -98,6 +98,11 @@ function AppContent() {
 
   if (publicAction && publicToken && ['confirm','cancel','reschedule','recovery'].includes(publicAction)) {
     return <PublicActionPage action={publicAction} token={publicToken} />
+  }
+
+  const paypalReturn = query.get('paypal')
+  if (session && !demo && paypalReturn) {
+    return <PaypalReturnScreen outcome={paypalReturn} subscriptionId={query.get('subscription_id')} />
   }
 
   if (recovery && session) return <SetNewPasswordScreen onDone={() => { setRecovery(false); window.history.replaceState({}, '', '/app') }} />
@@ -133,6 +138,7 @@ function BillingSetupScreen({ billing, reason, onReady, onSkip }) {
   async function startBilling() {
     setBusy(true); setMessage('')
     const res = await startCheckout(planCode)
+    if (res.redirecting) return // on the way to PayPal
     setBusy(false)
     if (res.ok) onReady()
     else if (!res.dismissed) setMessage(res.message)
@@ -190,9 +196,9 @@ function BillingSetupScreen({ billing, reason, onReady, onSkip }) {
         <div><span>Charge today</span><strong>{formattedAmount}</strong></div>
       </div>
       <button className="primary wide" onClick={startBilling} disabled={busy}>
-        {busy ? 'Opening Razorpay…' : billing.status === 'cancelled' ? 'Restart subscription' : 'Upgrade now'}
+        {busy ? 'Opening PayPal…' : billing.status === 'cancelled' ? 'Restart subscription' : 'Upgrade with PayPal'}
       </button>
-      <small className="renewal-note">You'll be charged {formattedAmount} today and every {periodWord} after that, plus applicable taxes, until you cancel in Settings. Payments are made to <strong>Shiva Dhali Services</strong>, which operates SlotRecover. {legal}</small>
+      <small className="renewal-note">You'll be charged {formattedAmount} today and every {periodWord} after that, plus applicable taxes, until you cancel in Settings. Payments are made to <strong>Shiva Dhali Services</strong>, which operates SlotRecover, through PayPal. Pay with your PayPal account or a debit or credit card. {legal}</small>
       {localCurrency && localCurrency !== currency && <small className="currency-note">Billing in {localCurrency} is coming soon. For now your plan is charged in {currency}, and your bank converts it.</small>}
       {message && <div className="form-msg">{message}</div>}
       <button type="button" className="text-btn signout-link" onClick={onSkip}>{trialOver && reason === null ? 'Skip for now and explore the dashboard' : 'Back to the dashboard'}</button>
@@ -201,6 +207,42 @@ function BillingSetupScreen({ billing, reason, onReady, onSkip }) {
   </div>
 }
 
+
+// PayPal sends the customer back here after checkout (?paypal=return&subscription_id=…) or when
+// they cancel it (?paypal=cancel).
+function PaypalReturnScreen({ outcome, subscriptionId }) {
+  const [state, setState] = useState(outcome === 'return' && subscriptionId ? 'working' : 'cancelled')
+  const [message, setMessage] = useState('')
+  const done = () => { window.location.replace('/app') }
+  useEffect(() => {
+    if (state !== 'working') return
+    let stop = false
+    ;(async () => {
+      // PayPal can take a few seconds to activate a just-approved subscription.
+      let res
+      for (let attempt = 0; attempt < 3 && !stop; attempt++) {
+        res = await confirmPaypalReturn(subscriptionId)
+        if (res.ok) break
+        await new Promise(r => setTimeout(r, 2500))
+      }
+      if (stop) return
+      if (res?.ok) { setState('ok'); setTimeout(done, 1500) }
+      else { setMessage(res?.message || 'We could not confirm your PayPal subscription.'); setState('error') }
+    })()
+    return () => { stop = true }
+  }, [])
+
+  return <div className="billing-setup-shell">
+    <div className="billing-setup-card">
+      <Brand />
+      {state === 'working' && <><div className="spinner" /><h1>Confirming your subscription…</h1><p>This takes a few seconds. Please keep this page open.</p></>}
+      {state === 'ok' && <><div className="billing-pill">THANK YOU</div><h1>You're upgraded.</h1><p>Every cancelled slot will now be offered to your waitlist automatically. Taking you to your dashboard…</p></>}
+      {state === 'cancelled' && <><div className="billing-pill">CHECKOUT CANCELLED</div><h1>No payment was made.</h1><p>You left PayPal before finishing, so nothing was charged. You can upgrade any time from your dashboard.</p></>}
+      {state === 'error' && <><div className="billing-pill">NOT CONFIRMED</div><h1>We couldn't confirm your payment.</h1><p>{message} If PayPal shows a payment, write to us from the Help page and we'll sort it out.</p></>}
+      {state !== 'working' && state !== 'ok' && <button className="primary wide" onClick={done}>Back to the dashboard</button>}
+    </div>
+  </div>
+}
 
 function PublicActionPage({ action, token }) {
   const query = new URLSearchParams(window.location.search)
@@ -855,7 +897,7 @@ function BillingBanner({ billing, recovered, onUpgrade, onOpenSettings }) {
     text = 'You have access until ' + fmt(until) + '. Restart any time from Settings.'
   } else if (billing.status === 'past_due') {
     title = 'Payment failed'
-    text = 'Razorpay could not charge your payment method. Update it to avoid interruption.'
+    text = 'PayPal couldn’t collect your last payment. Set up payment again to avoid interruption.'
   } else {
     return null
   }

@@ -49,7 +49,7 @@ function Terms() {
     <S h="7. Free trial, subscription and payment">
       <ul>
         <li>New accounts receive a {site.trialDays}-day free trial. <strong>No payment method is required.</strong> The free trial includes {site.freeRecoveries} recovered slot from your waitlist; all other features work during the trial. When the trial ends, access pauses until you choose a paid plan. Your data is kept.</li>
-        <li><strong>All payments for {site.product} are made to {site.company}</strong>, the business that operates the Service, through our payment processor (currently Razorpay). Charges appear on your statement under that name.</li>
+        <li><strong>All payments for {site.product} are made to {site.company}</strong>, the business that operates the Service, through our payment processor (currently PayPal). You can pay with a PayPal account or a debit or credit card. Charges appear on your statement under that name.</li>
         <li>When you upgrade, your paid plan starts immediately and <strong>renews automatically each billing period</strong> (monthly, every 6 months or yearly, as chosen) at the price shown at checkout, until you cancel.</li>
         <li>Fees are charged in advance for each billing period. Prices exclude taxes unless stated; you are responsible for applicable taxes, including VAT or GST under reverse-charge rules where they apply.</li>
         <li>We may change prices with at least 30 days' notice before your next renewal. If you do not agree, you may cancel before the change takes effect.</li>
@@ -105,7 +105,7 @@ function Privacy() {
     <S h="3. What we collect">
       <ul>
         <li><strong>Account and contact details:</strong> email address, password (stored hashed by our authentication provider), business name, services and prices.</li>
-        <li><strong>Billing details:</strong> subscription status, plan, and payment references from Razorpay. We do not receive or store full card numbers.</li>
+        <li><strong>Billing details:</strong> subscription status, plan, and payment references from PayPal. We do not receive or store card numbers or PayPal login details.</li>
         <li><strong>Usage and technical data:</strong> log data such as IP address, browser type, timestamps and error logs, used for security and troubleshooting.</li>
         <li><strong>Support communications:</strong> messages you send us.</li>
         <li><strong>Client data</strong> as described above, processed on your behalf.</li>
@@ -167,7 +167,7 @@ function Cookies() {
         <tr><td>Vercel Web Analytics (no cookies)</td><td>Vercel</td><td>Counts page views and referrers on our website without cookies or cross-site tracking; no personal profile is created</td><td>Not stored on your device</td></tr>
         <tr><td>Currency preference (local storage)</td><td>{site.product}</td><td>Remembers the currency you chose on the pricing page</td><td>Until cleared</td></tr>
         <tr><td>Google Analytics cookies (_ga, _ga_*) — only if enabled and you accept</td><td>Google</td><td>Measures how visitors find and use our marketing website</td><td>Up to 13 months</td></tr>
-        <tr><td>Razorpay Checkout cookies</td><td>Razorpay</td><td>Processes your subscription authorisation and prevents payment fraud; only set when you open checkout</td><td>Set by Razorpay; see Razorpay's policy</td></tr>
+        <tr><td>PayPal checkout cookies</td><td>PayPal</td><td>Processes your subscription approval and prevents payment fraud; only set on PayPal's site when you go to checkout</td><td>Set by PayPal; see PayPal's privacy statement</td></tr>
       </tbody></table>
     </S>
     <S h="Managing storage">
@@ -236,7 +236,7 @@ function Subprocessors() {
   const rows = [
     ['Supabase, Inc.', 'Database, authentication, serverless functions and scheduled jobs', site.dataRegion + '; USA (support and operations)'],
     ['Vercel, Inc.', 'Web hosting, content delivery and cookieless website analytics', 'Global edge network; USA'],
-    ['Razorpay Software Private Limited', 'Subscription billing and payment processing (account holders only)', 'India'],
+    ['PayPal Payments Private Limited and its affiliates', 'Subscription billing and payment processing (account holders only)', 'India, United States and other PayPal locations'],
     ['[Email delivery provider — TODO]', 'Sending account verification, appointment confirmation and recovery emails', '[Region — TODO]'],
   ]
   return <>
@@ -288,13 +288,13 @@ function Refunds() {
       <p>Every new account gets a {site.trialDays}-day free trial. <strong>No payment method is needed and nothing is charged automatically.</strong> The trial includes {site.freeRecoveries} recovered slot from your waitlist; you can upgrade at any time for unlimited recovery. When the trial ends, your workspace pauses until you choose a plan.</p>
     </S>
     <S h="Who you pay">
-      <p>All payments for {site.product} are made to <strong>{site.company}</strong>, which operates the Service, and are processed securely by Razorpay. Charges appear on your bank or card statement under that name.</p>
+      <p>All payments for {site.product} are made to <strong>{site.company}</strong>, which operates the Service, and are processed securely by PayPal. Charges appear on your bank or card statement under that name.</p>
     </S>
     <S h="Automatic renewal">
       <p>Subscriptions renew automatically at the end of each billing period at the price shown at sign-up, until you cancel. We will email you before any price change takes effect.</p>
     </S>
     <S h="How to cancel">
-      <p>Cancel online at any time in <strong>Settings → Subscription → Cancel subscription</strong>. The free trial needs no cancellation, since nothing is charged. If you cancel during a paid period, renewal stops and you keep access until the end of that period.</p>
+      <p>Cancel online at any time in <strong>Settings → Subscription → Cancel subscription</strong>. The free trial needs no cancellation, since nothing is charged. If you cancel during a paid period, renewal stops and you keep access until the end of that period. Cancelling the automatic payment for SlotRecover in your PayPal account has the same effect.</p>
       <p>You can also email <Mail to={site.billingEmail}/> from your account email with the subject "Cancel subscription"; we confirm within one business day.</p>
     </S>
     <S h="Refunds">

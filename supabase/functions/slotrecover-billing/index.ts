@@ -1,5 +1,6 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { applySubscription, BRAND_NAME, ensurePlan, ensureWebhook, getSubscription, paypal, paypalConfigured } from "./paypal.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -13,59 +14,15 @@ const respond = (body: unknown, status = 200) =>
     headers: { ...cors, "Content-Type": "application/json" },
   });
 
-// Strip whitespace, newlines and wrapping quotes that often sneak in when
-// secrets are pasted into the dashboard/CLI.
-function normalizeSecret(raw: string | undefined | null) {
-  if (!raw) return "";
-  let v = raw.trim();
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-    v = v.slice(1, -1).trim();
-  }
-  return v;
-}
+const PLAN_FIELDS = "id,code,name,amount_paise,currency,period,interval_count,trial_days,paypal_plan_id,paypal_sandbox_plan_id,test_mode,plan_group";
 
-async function hmacHex(secret: string, message: string) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function razorpayRaw(path: string, keyId: string, keySecret: string, init: RequestInit = {}) {
-  const headers = new Headers(init.headers || {});
-  headers.set("Authorization", "Basic " + btoa(keyId + ":" + keySecret));
-  headers.set("Content-Type", "application/json");
-  const res = await fetch("https://api.razorpay.com" + path, { ...init, headers });
-  const text = await res.text();
-  let data: any = {};
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = { raw: text.slice(0, 300) };
+// Where PayPal sends the customer back. Only our own sites are allowed.
+function appOrigin(req: Request) {
+  const origin = req.headers.get("origin") || "";
+  if (/^https:\/\/(www\.)?slotrecover\.pro$/.test(origin) || /^https:\/\/slotrecover[a-z0-9-]*\.vercel\.app$/.test(origin) || /^http:\/\/localhost:\d+$/.test(origin)) {
+    return origin;
   }
-  return { res, data };
-}
-
-async function razorpayFetch(path: string, keyId: string, keySecret: string, init: RequestInit = {}) {
-  const { res, data } = await razorpayRaw(path, keyId, keySecret, init);
-  if (!res.ok) {
-    const details = data?.error || data || {};
-    const message =
-      details?.description ||
-      details?.reason ||
-      details?.code ||
-      details?.raw ||
-      (typeof details === "string" ? details : JSON.stringify(details)) ||
-      "Razorpay request failed";
-    console.error("Razorpay API error", { path, status: res.status, details });
-    throw new Error("Razorpay " + res.status + ": " + message);
-  }
-  return data;
+  return "https://www.slotrecover.pro";
 }
 
 Deno.serve(async (req) => {
@@ -93,224 +50,170 @@ Deno.serve(async (req) => {
     const user = userData.user;
     const admin = createClient(url, serviceRole, { auth: { persistSession: false } });
 
-    const { data: billing, error: billingError } = await admin
+    const { data: billingRow, error: billingError } = await admin
       .from("billing_accounts")
-      .select("user_id,status,trial_started_at,trial_ends_at,razorpay_subscription_id,razorpay_payment_id,authorization_verified_at,current_period_start,current_period_end,cancel_at_period_end,plan_id,billing_plans(id,code,name,amount_paise,currency,period,interval_count,trial_days,razorpay_plan_id,test_mode,plan_group)")
+      .select(`user_id,status,trial_started_at,trial_ends_at,payment_provider,paypal_subscription_id,razorpay_subscription_id,authorization_verified_at,current_period_start,current_period_end,cancel_at_period_end,plan_id,billing_plans(${PLAN_FIELDS})`)
       .eq("user_id", user.id)
       .single();
 
-    if (billingError || !billing) throw billingError || new Error("Billing account not found");
+    if (billingError || !billingRow) throw billingError || new Error("Billing account not found");
+    const billing: any = billingRow;
 
     if (action === "status") {
-      return respond({ ok: true, billing });
+      const { billing_plans, ...rest } = billing as any;
+      const { paypal_plan_id: _a, paypal_sandbox_plan_id: _b, ...plan } = billing_plans || {};
+      return respond({ ok: true, billing: { ...rest, billing_plans: billing_plans ? plan : null } });
     }
 
-    const keyId = normalizeSecret(Deno.env.get("RAZORPAY_KEY_ID"));
-    const keySecret = normalizeSecret(Deno.env.get("RAZORPAY_KEY_SECRET"));
-    if (!keyId || !keySecret) {
+    if (!paypalConfigured()) {
       return respond({
-        error: "razorpay_not_configured",
-        message: "Razorpay test credentials have not been added to Edge Function secrets yet.",
+        error: "paypal_not_configured",
+        message: "Payments are being set up. Please try again shortly.",
       }, 503);
     }
 
     if (action === "create_subscription") {
-      const planFields = "id,code,name,amount_paise,currency,period,interval_count,trial_days,razorpay_plan_id,test_mode,plan_group";
-      // Plans can change until a subscription has been authorized.
-      const canSwitch = !billing.razorpay_subscription_id || ["authorization_pending", "cancelled", "expired", "halted"].includes(billing.status);
+      const paying = ["active", "authenticated"].includes(billing.status) && billing.paypal_subscription_id;
+      if (paying) {
+        return respond({ error: "already_subscribed", message: "Your subscription is already active." }, 400);
+      }
+
+      // The plan the user picked (monthly, 6 months or yearly).
       const planCode = String(body?.plan_code || "");
-      const wanted = String(body?.currency || "").toUpperCase();
-      let chosen = null;
-      if (canSwitch && planCode && planCode !== billing.billing_plans?.code) {
-        // The plan the user picked (monthly, 6 months or yearly).
-        const { data } = await admin.from("billing_plans").select(planFields)
+      if (planCode && planCode !== billing.billing_plans?.code) {
+        const { data: chosen } = await admin.from("billing_plans").select(PLAN_FIELDS)
           .eq("code", planCode).eq("active", true).eq("plan_group", billing.billing_plans?.plan_group || "standard").maybeSingle();
-        chosen = data;
-      } else if (canSwitch && !planCode && wanted && wanted !== billing.billing_plans?.currency) {
-        // Otherwise prefer the same term in the visitor's currency when one is active.
-        const { data } = await admin.from("billing_plans").select(planFields)
-          .eq("plan_group", billing.billing_plans?.plan_group || "standard").eq("currency", wanted)
-          .eq("period", billing.billing_plans?.period).eq("interval_count", billing.billing_plans?.interval_count)
-          .eq("active", true).maybeSingle();
-        chosen = data;
+        if (chosen) {
+          await admin.from("billing_accounts").update({ plan_id: chosen.id, updated_at: new Date().toISOString() }).eq("user_id", user.id);
+          billing.plan_id = chosen.id;
+          (billing as any).billing_plans = chosen;
+        }
       }
-      if (chosen) {
-        await admin.from("billing_accounts").update({ plan_id: chosen.id, updated_at: new Date().toISOString() }).eq("user_id", user.id);
-        billing.plan_id = chosen.id;
-        billing.billing_plans = chosen;
-      }
+      const plan: any = billing.billing_plans;
+      if (!plan) throw new Error("No plan selected.");
 
-      // The free trial starts at signup (no card) and is never restarted at checkout.
+      const paypalPlanId = await ensurePlan(admin, plan);
 
-      let razorpayPlanId = billing.billing_plans?.razorpay_plan_id;
+      // Make sure PayPal will tell us about renewals and cancellations. Checkout still works
+      // without it (the return page confirms the subscription), so don't block on a failure.
+      await ensureWebhook(true).catch((e) => console.error("PayPal webhook setup failed", String(e?.message || e)));
 
-      if (!razorpayPlanId) {
-        const createdPlan = await razorpayFetch("/v1/plans", keyId, keySecret, {
-          method: "POST",
-          body: JSON.stringify({
-            period: billing.billing_plans.period,
-            interval: billing.billing_plans.interval_count,
-            item: {
-              name: billing.billing_plans.name,
-              amount: billing.billing_plans.amount_paise,
-              currency: billing.billing_plans.currency,
-              description: "SlotRecover recurring subscription",
-            },
-            notes: { source: "slotrecover" },
-          }),
-        });
-        razorpayPlanId = createdPlan.id;
-
-        await admin
-          .from("billing_plans")
-          .update({ razorpay_plan_id: razorpayPlanId, updated_at: new Date().toISOString() })
-          .eq("id", billing.plan_id);
+      // A suspended subscription (failed payments) is replaced by the new one.
+      if (billing.paypal_subscription_id && billing.status === "past_due") {
+        await paypal("/v1/billing/subscriptions/" + billing.paypal_subscription_id + "/cancel", {
+          body: { reason: "Replaced by a new SlotRecover subscription" },
+          allow: [404, 422],
+        }).catch(() => {});
       }
 
-      // A cancelled/expired/halted subscription cannot be reused; start a new one.
-      const restarting = ["cancelled", "expired", "halted"].includes(billing.status);
-      // A subscription left pending on another plan can't be reused either.
-      let subscriptionId = restarting || chosen ? null : billing.razorpay_subscription_id;
-
-      if (!subscriptionId) {
-        const payload: Record<string, unknown> = {
-          plan_id: razorpayPlanId,
-          // About 10 years of renewals, whatever the term length.
-          total_count: Math.ceil(120 / ((billing.billing_plans.period === "yearly" ? 12 : 1) * (billing.billing_plans.interval_count || 1))),
-          quantity: 1,
-          customer_notify: 0,
-        };
-        // The free trial needs no card. Upgrading starts the paid plan straight away, so the
-        // first charge happens at checkout (no deferred start date).
-        const subscription = await razorpayFetch("/v1/subscriptions", keyId, keySecret, {
-          method: "POST",
-          body: JSON.stringify({
-            ...payload,
-            notes: {
-              slotrecover_user_id: user.id,
-              slotrecover_plan_code: billing.billing_plans.code,
-            },
-          }),
-        });
-        subscriptionId = subscription.id;
-
-        await admin
-          .from("billing_accounts")
-          .update({
-            razorpay_subscription_id: subscriptionId,
-            status: "authorization_pending",
-            cancel_at_period_end: false,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("user_id", user.id);
-      }
-
-      return respond({
-        ok: true,
-        key_id: keyId,
-        subscription_id: subscriptionId,
-        name: "Shiva Dhali Services",
-        description: billing.billing_plans.name,
-        amount_paise: billing.billing_plans.amount_paise,
-        currency: billing.billing_plans.currency,
-        trial_ends_at: billing.trial_ends_at,
-        prefill: { email: user.email || "" },
+      const origin = appOrigin(req);
+      // Upgrading starts the paid plan straight away: the first charge happens on approval.
+      const { data: sub } = await paypal("/v1/billing/subscriptions", {
+        requestId: crypto.randomUUID(),
+        body: {
+          plan_id: paypalPlanId,
+          custom_id: user.id,
+          ...(user.email ? { subscriber: { email_address: user.email } } : {}),
+          application_context: {
+            brand_name: BRAND_NAME,
+            shipping_preference: "NO_SHIPPING",
+            user_action: "SUBSCRIBE_NOW",
+            payment_method: { payer_selected: "PAYPAL", payee_preferred: "IMMEDIATE_PAYMENT_REQUIRED" },
+            return_url: origin + "/app?paypal=return",
+            cancel_url: origin + "/app?paypal=cancel",
+          },
+        },
       });
+      const approveUrl = (sub?.links || []).find((l: any) => l.rel === "approve")?.href;
+      if (!sub?.id || !approveUrl) throw new Error("PayPal did not return a checkout link.");
+
+      // Remember the pending subscription. Access doesn't change until it is approved.
+      await admin.from("billing_accounts").update({
+        paypal_subscription_id: sub.id,
+        payment_provider: "paypal",
+        updated_at: new Date().toISOString(),
+      }).eq("user_id", user.id);
+
+      await admin.from("billing_events").insert({
+        user_id: user.id,
+        paypal_subscription_id: sub.id,
+        event_type: "app.checkout_started",
+        payload: { plan_code: plan.code, paypal_plan_id: paypalPlanId },
+      });
+
+      return respond({ ok: true, subscription_id: sub.id, approve_url: approveUrl });
     }
 
     if (action === "verify_checkout") {
-      const paymentId = String(body?.razorpay_payment_id || "");
-      const subscriptionId = String(body?.razorpay_subscription_id || "");
-      const signature = String(body?.razorpay_signature || "");
-
-      if (!paymentId || !subscriptionId || !signature) {
-        return respond({ error: "missing_checkout_fields" }, 400);
-      }
-      if (subscriptionId !== billing.razorpay_subscription_id) {
-        return respond({ error: "subscription_mismatch" }, 400);
+      const subscriptionId = String(body?.subscription_id || "");
+      if (!subscriptionId) return respond({ error: "missing_subscription", message: "PayPal didn't return a subscription." }, 400);
+      if (subscriptionId !== billing.paypal_subscription_id) {
+        return respond({ error: "subscription_mismatch", message: "This PayPal subscription doesn't belong to your account." }, 400);
       }
 
-      const expected = await hmacHex(keySecret, paymentId + "|" + subscriptionId);
-      if (expected !== signature) {
-        return respond({ error: "signature_verification_failed" }, 400);
+      const sub = await getSubscription(subscriptionId);
+      if (sub?.custom_id !== user.id) {
+        return respond({ error: "subscription_mismatch", message: "This PayPal subscription doesn't belong to your account." }, 400);
+      }
+      if (!["ACTIVE", "APPROVED"].includes(String(sub?.status))) {
+        return respond({
+          error: "not_approved",
+          message: sub?.status === "APPROVAL_PENDING"
+            ? "The PayPal checkout wasn't completed, so nothing was charged."
+            : "PayPal reports this subscription as " + String(sub?.status || "unknown").toLowerCase() + ".",
+        }, 400);
       }
 
-      await admin
-        .from("billing_accounts")
-        .update({
-          status: "authenticated",
-          razorpay_payment_id: paymentId,
-          authorization_verified_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          last_event: "checkout.authorization_verified",
-          last_event_at: new Date().toISOString(),
-        })
-        .eq("user_id", user.id);
-
+      const applied = await applySubscription(admin, sub, "checkout.approved");
       await admin.from("billing_events").insert({
         user_id: user.id,
-        razorpay_subscription_id: subscriptionId,
-        event_type: "checkout.authorization_verified",
-        payload: {
-          razorpay_payment_id: paymentId,
-          razorpay_subscription_id: subscriptionId,
-        },
+        paypal_subscription_id: subscriptionId,
+        event_type: "checkout.approved",
+        payload: { status: sub.status, plan_id: sub.plan_id, next_billing_time: sub.billing_info?.next_billing_time || null },
       });
 
-      return respond({ ok: true, status: "authenticated" });
+      return respond({ ok: true, status: applied?.status || "active" });
     }
 
     if (action === "cancel_subscription") {
-      const subscriptionId = billing.razorpay_subscription_id;
-      if (!subscriptionId || ["cancelled", "expired"].includes(billing.status)) {
+      const subscriptionId = billing.paypal_subscription_id;
+      if (!subscriptionId || billing.payment_provider !== "paypal" || ["cancelled", "expired"].includes(billing.status)) {
         return respond({ error: "no_active_subscription", message: "There is no active subscription to cancel." }, 400);
       }
 
-      const current = await razorpayFetch("/v1/subscriptions/" + subscriptionId, keyId, keySecret, { method: "GET" });
-      const rzStatus = String(current?.status || "");
-      const now = new Date().toISOString();
-      let updates: Record<string, unknown>;
-      let accessUntil: string | null;
-
-      if (["created", "authenticated"].includes(rzStatus)) {
-        // Still in trial: nothing has been charged, so cancel immediately.
-        await razorpayFetch("/v1/subscriptions/" + subscriptionId + "/cancel", keyId, keySecret, {
-          method: "POST",
-          body: JSON.stringify({ cancel_at_cycle_end: 0 }),
+      const current = await getSubscription(subscriptionId);
+      const ppStatus = String(current?.status || "");
+      if (["ACTIVE", "SUSPENDED", "APPROVED"].includes(ppStatus)) {
+        await paypal("/v1/billing/subscriptions/" + subscriptionId + "/cancel", {
+          body: { reason: "Cancelled by the customer in SlotRecover" },
         });
-        accessUntil = billing.trial_ends_at;
-        updates = { status: "cancelled", cancel_at_period_end: false };
-      } else if (["active", "pending"].includes(rzStatus)) {
-        // Paid period in progress: stop renewal, keep access until the period ends.
-        await razorpayFetch("/v1/subscriptions/" + subscriptionId + "/cancel", keyId, keySecret, {
-          method: "POST",
-          body: JSON.stringify({ cancel_at_cycle_end: 1 }),
-        });
-        const periodEnd = current?.current_end ? new Date(current.current_end * 1000).toISOString() : billing.current_period_end;
-        accessUntil = periodEnd;
-        updates = { cancel_at_period_end: true, current_period_end: periodEnd };
-      } else {
-        accessUntil = billing.current_period_end || billing.trial_ends_at;
-        updates = { status: "cancelled", cancel_at_period_end: false };
       }
 
-      await admin
-        .from("billing_accounts")
-        .update({ ...updates, last_event: "app.cancel_requested", last_event_at: now, updated_at: now })
-        .eq("user_id", user.id);
+      // PayPal stops future charges at once; access continues to the end of the paid period.
+      const now = new Date().toISOString();
+      const accessUntil = current?.billing_info?.next_billing_time || billing.current_period_end || billing.trial_ends_at;
+      await admin.from("billing_accounts").update({
+        status: "cancelled",
+        cancel_at_period_end: false,
+        current_period_end: accessUntil,
+        last_event: "app.cancel_requested",
+        last_event_at: now,
+        updated_at: now,
+      }).eq("user_id", user.id);
 
       await admin.from("billing_events").insert({
         user_id: user.id,
-        razorpay_subscription_id: subscriptionId,
+        paypal_subscription_id: subscriptionId,
         event_type: "app.cancel_requested",
-        payload: { razorpay_status_before: rzStatus, access_until: accessUntil },
+        payload: { paypal_status_before: ppStatus, access_until: accessUntil },
       });
 
-      return respond({ ok: true, access_until: accessUntil, immediate: updates.status === "cancelled" });
+      return respond({ ok: true, access_until: accessUntil, immediate: false });
     }
 
     return respond({ error: "unsupported_action" }, 400);
   } catch (error) {
+    console.error("billing error", error instanceof Error ? error.message : String(error));
     return respond({
       error: "request_failed",
       message: error instanceof Error ? error.message : String(error),
