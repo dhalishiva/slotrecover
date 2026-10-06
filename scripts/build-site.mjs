@@ -269,7 +269,7 @@ function pricing() {
   </div>
 </div></section>
 ${faqBlock(PRICING_FAQ)}
-${ctaBand('Try it free for a week.')}`
+${ctaBand('Try it free for 30 days.')}`
   return layout({ route: '/pricing', title: `Pricing · ${PRODUCT}`, description: `${PRODUCT} pricing: one plan with everything included, billed monthly, every 6 months or yearly. Shown in USD, EUR or GBP. ${TRIAL_DAYS}-day free trial, no card needed.`, body, jsonLd: [appLd, faqLd(PRICING_FAQ), crumbs([['Home', '/'], ['Pricing', '/pricing']])] })
 }
 
