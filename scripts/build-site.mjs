@@ -339,5 +339,5 @@ fs.copyFileSync(path.join(root, 'scripts', 'site.css'), path.join(dist, 'site.cs
 const today = new Date().toISOString().slice(0, 10)
 const urls = [['/', '1.0'], ['/pricing', '0.9'], ['/industries', '0.8'], ...INDUSTRIES.map(i => [`/industries/${i.slug}`, '0.8']), ['/help', '0.6'], ['/terms', '0.3'], ['/privacy', '0.3'], ['/cookies', '0.2'], ['/dpa', '0.2'], ['/subprocessors', '0.2'], ['/acceptable-use', '0.2'], ['/refunds', '0.3'], ['/contact', '0.4']]
 write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(([u, p]) => `  <url><loc>${SITE_URL}${u === '/' ? '/' : u}</loc><lastmod>${today}</lastmod><priority>${p}</priority></url>`).join('\n')}\n</urlset>\n`)
-write('robots.txt', `User-agent: *\nAllow: /\nDisallow: /app\nDisallow: /api/\n\nSitemap: ${SITE_URL}/sitemap.xml\n`)
+write('robots.txt', `User-agent: *\nAllow: /\nDisallow: /api/\n\nSitemap: ${SITE_URL}/sitemap.xml\n`)
 console.log(`Built marketing site: ${3 + INDUSTRIES.length} pages, sitemap with ${urls.length} URLs`)
