@@ -320,7 +320,7 @@ function Contact() {
         <tr><th>Billing and cancellations</th><td><Mail to={site.billingEmail}/></td></tr>
         <tr><th>Privacy and data requests</th><td><Mail to={site.privacyEmail}/></td></tr>
         <tr><th>WhatsApp</th><td><a href={'https://wa.me/' + site.whatsappDigits} target="_blank" rel="noreferrer">{site.whatsapp}</a></td></tr>
-        <tr><th>Business</th><td>{site.company}<br/>{site.address}</td></tr>
+        <tr><th>Business</th><td>{site.company}<br/>{site.address}<br/>{site.product} is a product of <a href={site.parentUrl} target="_blank" rel="noopener">{site.parentBrand}</a>.</td></tr>
       </tbody></table>
       <p>We reply to support requests within one business day (Monday–Friday). Many answers are in the <L to="/help">Help Center</L>.</p>
     </S>
@@ -353,7 +353,7 @@ export function SiteFooter() {
       <a href="/help">Help Center</a>
       {legalLinks.map(([to, label]) => <a key={to} href={to}>{label}</a>)}
     </nav>
-    <p>© {new Date().getFullYear()} {site.company}. {site.product} is operated by {site.company}.</p>
+    <p>© {new Date().getFullYear()} {site.company}. {site.product} is a product of <a href={site.parentUrl} target="_blank" rel="noopener">{site.parentBrand}</a>, operated by {site.company}.</p>
   </footer>
 }
 

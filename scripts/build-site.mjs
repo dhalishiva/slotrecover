@@ -82,12 +82,12 @@ ${body}
 </main>
 <footer class="footer">
   <div class="wrap footer-in">
-    <div class="footer-brand"><a class="brand" href="/">${LOGO}<span>${PRODUCT}</span></a><p>Recover revenue from cancellations and no-shows automatically.</p></div>
+    <div class="footer-brand"><a class="brand" href="/">${LOGO}<span>${PRODUCT}</span></a><p>Recover revenue from cancellations and no-shows automatically.</p><p class="footer-parent">A product of <a href="https://kriosity.in" target="_blank" rel="noopener">Kriosity</a></p></div>
     <div><h4>Product</h4><a href="/pricing">Pricing</a><a href="/industries">Industries</a><a href="/help">Help Center</a><a href="/app">Sign in</a></div>
     <div><h4>Popular</h4>${INDUSTRIES.slice(0, 5).map(i => `<a href="/industries/${i.slug}">${esc(i.name)}</a>`).join('')}</div>
     <div><h4>Legal</h4><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/cookies">Cookies</a><a href="/dpa">DPA</a><a href="/contact">Contact</a></div>
   </div>
-  <div class="wrap footer-base">© ${new Date().getFullYear()} ${COMPANY}. ${PRODUCT} is operated by ${COMPANY}.</div>
+  <div class="wrap footer-base">© ${new Date().getFullYear()} ${COMPANY}. ${PRODUCT} is a product of <a href="https://kriosity.in" target="_blank" rel="noopener">Kriosity</a>, operated by ${COMPANY}.</div>
 </footer>
 ${GA_ID ? consentBanner() : ''}
 <script>
@@ -136,7 +136,7 @@ const faqBlock = (faqs, heading = 'Frequently asked questions') => `
 </div></section>`
 
 const faqLd = faqs => ({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faqs.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) })
-const orgLd = { '@context': 'https://schema.org', '@type': 'Organization', name: PRODUCT, legalName: COMPANY, url: SITE_URL, logo: SITE_URL + '/icons/icon-512.png' }
+const orgLd = { '@context': 'https://schema.org', '@type': 'Organization', name: PRODUCT, legalName: COMPANY, url: SITE_URL, logo: SITE_URL + '/icons/icon-512.png', parentOrganization: { '@type': 'Organization', name: 'Kriosity', url: 'https://kriosity.in' } }
 const appLd = { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: PRODUCT, applicationCategory: 'BusinessApplication', operatingSystem: 'Web, Android, iOS', url: SITE_URL, description: 'Appointment confirmation and cancellation-recovery software that refills empty slots from a waitlist.', offers: Object.entries(PRICES).map(([cur, p]) => ({ '@type': 'Offer', price: String(p.amount), priceCurrency: cur, category: 'subscription' })) }
 const crumbs = items => ({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: items.map(([name, route], i) => ({ '@type': 'ListItem', position: i + 1, name, item: SITE_URL + route })) })
 

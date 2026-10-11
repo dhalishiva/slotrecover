@@ -6,8 +6,10 @@ export const site = {
   company: 'Shiva Dhali Services',
   // TODO: legal form, e.g. "a sole proprietorship registered in India"
   companyDescription: 'a business registered in India',
-  // TODO: full registered postal address (required on invoices, GDPR and CAN-SPAM)
-  address: '[Registered business address], Noida, Uttar Pradesh, India',
+  address: '42-A / BLK-S.K. EWS, Sector 66, Noida, Gautam Buddha Nagar, Uttar Pradesh 201301, India',
+  // SlotRecover is one of Kriosity's products.
+  parentBrand: 'Kriosity',
+  parentUrl: 'https://kriosity.in',
   // One inbox for everything for now; split later by changing these.
   supportEmail: 'support@kriosity.in',
   privacyEmail: 'support@kriosity.in',

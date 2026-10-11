@@ -180,3 +180,5 @@ a.chip:hover{border-color:#b8bcff;color:var(--ink)}
   .browser-bar{height:30px}.browser-bar span{display:none}
 }
 .tour-shot>img.cut{border:0;border-radius:0;box-shadow:none;filter:drop-shadow(0 22px 40px rgba(20,24,40,.16))}
+.footer-brand .footer-parent{margin-top:8px;font-size:13px}
+.footer-in .footer-parent a:not(.brand),.footer-base a{display:inline;margin:0;padding:0;font-size:inherit;color:inherit;text-decoration:underline;text-underline-offset:2px}
