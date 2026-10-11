@@ -8,14 +8,17 @@ export const site = {
   companyDescription: 'a business registered in India',
   // TODO: full registered postal address (required on invoices, GDPR and CAN-SPAM)
   address: '[Registered business address], Noida, Uttar Pradesh, India',
-  // TODO: replace with mailboxes on your own domain
-  supportEmail: 'support@slotrecover.pro',
-  privacyEmail: 'privacy@slotrecover.pro',
-  billingEmail: 'billing@slotrecover.pro',
+  // One inbox for everything for now; split later by changing these.
+  supportEmail: 'support@kriosity.in',
+  privacyEmail: 'support@kriosity.in',
+  billingEmail: 'support@kriosity.in',
+  // WhatsApp for customers: shown as text, linked as wa.me/<digits>.
+  whatsapp: '+91 97164 14417',
+  whatsappDigits: '919716414417',
   url: 'https://www.slotrecover.pro',
   // TODO: appoint before actively marketing to the EU / UK (GDPR Art. 27)
-  euRepresentative: 'To be appointed. Until then, contact privacy@slotrecover.pro.',
-  ukRepresentative: 'To be appointed. Until then, contact privacy@slotrecover.pro.',
+  euRepresentative: 'To be appointed. Until then, contact support@kriosity.in.',
+  ukRepresentative: 'To be appointed. Until then, contact support@kriosity.in.',
   governingLaw: 'the laws of India',
   venue: 'the courts of New Delhi, India',
   effectiveDate: 'September 29, 2026',

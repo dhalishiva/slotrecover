@@ -319,6 +319,7 @@ function Contact() {
         <tr><th>General support</th><td><Mail to={site.supportEmail}/></td></tr>
         <tr><th>Billing and cancellations</th><td><Mail to={site.billingEmail}/></td></tr>
         <tr><th>Privacy and data requests</th><td><Mail to={site.privacyEmail}/></td></tr>
+        <tr><th>WhatsApp</th><td><a href={'https://wa.me/' + site.whatsappDigits} target="_blank" rel="noreferrer">{site.whatsapp}</a></td></tr>
         <tr><th>Business</th><td>{site.company}<br/>{site.address}</td></tr>
       </tbody></table>
       <p>We reply to support requests within one business day (Monday–Friday). Many answers are in the <L to="/help">Help Center</L>.</p>

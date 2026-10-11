@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, HelpCircle, Mail, Search, X, BookOpen } from 'lucide-react'
+import { ChevronDown, HelpCircle, Mail, MessageCircle, Search, X, BookOpen } from 'lucide-react'
 import { site } from './siteConfig'
 import { SiteHeader, SiteFooter } from './legal'
 
@@ -113,7 +113,10 @@ export function HelpCenter() {
       </section>)}
       <div className="help-contact">
         <div><strong>Still stuck?</strong><span>We reply within one business day.</span></div>
-        <a className="primary" href={'mailto:' + site.supportEmail}><Mail size={16}/> Email support</a>
+        <div className="help-contact-actions">
+          <a className="primary" href={'mailto:' + site.supportEmail}><Mail size={16}/> Email support</a>
+          <a className="ghost" href={'https://wa.me/' + site.whatsappDigits} target="_blank" rel="noreferrer"><MessageCircle size={16}/> WhatsApp</a>
+        </div>
       </div>
     </div>
     <SiteFooter />
@@ -156,7 +159,8 @@ export function HelpBubble() {
       </div>
       <div className="help-panel-foot">
         <a href="/help"><BookOpen size={15}/> Help Center</a>
-        <a href={'mailto:' + site.supportEmail}><Mail size={15}/> Email support</a>
+        <a href={'mailto:' + site.supportEmail}><Mail size={15}/> Email</a>
+        <a href={'https://wa.me/' + site.whatsappDigits} target="_blank" rel="noreferrer"><MessageCircle size={15}/> WhatsApp</a>
       </div>
     </div>}
     <button type="button" className={'help-bubble' + (isOpen ? ' is-open' : '')} onClick={() => setIsOpen(!isOpen)} aria-label={isOpen ? 'Close help' : 'Open help'}>

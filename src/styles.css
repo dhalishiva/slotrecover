@@ -405,3 +405,9 @@
 .paypal-loading{display:flex;align-items:center;justify-content:center;gap:10px;min-height:110px;font-size:13px;color:#747984}
 .paypal-loading .spinner{margin:0}
 .billing-setup-card .paypal-fallback{display:block;margin:6px auto 0;font-size:12px;color:#747984}
+.help-contact .help-contact-actions{flex-direction:row;gap:8px;flex-wrap:wrap}
+.help-contact .ghost{text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.help-panel-foot{grid-template-columns:1fr 1fr 1fr}
+.help-panel-foot a+a{border-left:1px solid #eceef1}
+.help-panel-foot a:first-child{border-right:0}
+@media (max-width:640px){.help-contact .help-contact-actions{justify-content:center}}
